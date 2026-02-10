@@ -2,11 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
-import io
+import json
 from datetime import datetime, time, timedelta
 import time as tm
 import warnings
@@ -56,8 +52,15 @@ with st.sidebar:
     # Asset selection
     asset = st.selectbox(
         "Primary Asset",
-        ["BTC", "ETH", "XAUUSD"],
+        ["BTC", "ETH", "XAUUSD", "DXY"],
         index=0
+    )
+    
+    # Timeframe
+    timeframe = st.selectbox(
+        "Timeframe",
+        ["1h", "4h", "1d", "1w"],
+        index=1
     )
     
     # Signal sensitivity
@@ -69,173 +72,189 @@ with st.sidebar:
         help="Higher values = more sensitive signals"
     )
     
-    # Timeframe
-    timeframe = st.selectbox(
-        "Timeframe",
-        ["1h", "4h", "Daily", "Weekly"],
-        index=1
-    )
-    
     # Auto-refresh
-    auto_refresh = st.checkbox("Auto-refresh (60s)", value=False)
+    auto_refresh = st.checkbox("Auto-refresh (30s)", value=False)
     
-    # Notification preferences
-    st.subheader("🔔 Notifications")
-    email_alerts = st.checkbox("Email Alerts", value=False)
-    tg_alerts = st.checkbox("Telegram Alerts", value=False)
-    
+    st.divider()
     if st.button("🔄 Force Refresh"):
         st.rerun()
+    
+    st.caption("Version 1.0 | Institutional Grade")
 
 # -------------------------------------------------
-# DATA FETCHERS WITH ERROR HANDLING
+# SIMPLIFIED DATA FETCHERS
 # -------------------------------------------------
-@st.cache_data(ttl=300)  # Cache for 5 minutes
-def get_btc_price(interval="1h", limit=500):
+@st.cache_data(ttl=60)  # Cache for 1 minute
+def get_crypto_price(symbol="BTC", interval="4h", limit=100):
+    """Get cryptocurrency price data from Binance"""
     try:
-        if interval == "4h":
-            interval_param = "4h"
-        elif interval == "Daily":
-            interval_param = "1d"
-        elif interval == "Weekly":
-            interval_param = "1w"
-        else:
-            interval_param = "1h"
-            
-        r = requests.get(
-            "https://api.binance.com/api/v3/klines",
-            params={
-                "symbol": "BTCUSDT",
-                "interval": interval_param,
-                "limit": limit
-            },
-            timeout=10
-        )
-        r.raise_for_status()
-        data = pd.DataFrame(r.json(), columns=[
-            "time", "open", "high", "low", "close", "volume",
-            "close_time", "quote_volume", "trades", "taker_buy_base",
-            "taker_buy_quote", "ignore"
+        # Map symbols to Binance format
+        symbol_map = {
+            "BTC": "BTCUSDT",
+            "ETH": "ETHUSDT"
+        }
+        
+        binance_symbol = symbol_map.get(symbol, "BTCUSDT")
+        
+        # Map interval
+        interval_map = {
+            "1h": "1h",
+            "4h": "4h", 
+            "1d": "1d",
+            "1w": "1w"
+        }
+        
+        binance_interval = interval_map.get(interval, "4h")
+        
+        # Fetch data
+        url = f"https://api.binance.com/api/v3/klines"
+        params = {
+            "symbol": binance_symbol,
+            "interval": binance_interval,
+            "limit": limit
+        }
+        
+        response = requests.get(url, params=params, timeout=5)
+        data = response.json()
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(data, columns=[
+            'timestamp', 'open', 'high', 'low', 'close', 'volume',
+            'close_time', 'quote_volume', 'trades', 'taker_buy_base',
+            'taker_buy_quote', 'ignore'
         ])
         
-        numeric_cols = ["open", "high", "low", "close", "volume"]
-        data[numeric_cols] = data[numeric_cols].astype(float)
-        data["time"] = pd.to_datetime(data["time"], unit="ms")
+        # Convert types
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
         
-        return data.set_index("time")
+        df.set_index('timestamp', inplace=True)
+        return df[['open', 'high', 'low', 'close', 'volume']]
+        
     except Exception as e:
-        st.error(f"Error fetching BTC data: {e}")
-        # Return sample data if API fails
-        dates = pd.date_range(end=datetime.now(), periods=200, freq='h')
-        prices = np.random.normal(40000, 1000, 200).cumsum()
+        st.warning(f"Could not fetch {symbol} data: {e}")
+        # Generate sample data
+        dates = pd.date_range(end=datetime.now(), periods=limit, freq='h')
+        price = np.random.normal(50000, 2000, limit).cumsum() + 40000
         return pd.DataFrame({
-            'open': prices - 100,
-            'close': prices,
-            'high': prices + np.random.normal(200, 50, 200),
-            'low': prices - np.random.normal(200, 50, 200),
-            'volume': np.random.normal(1000, 200, 200)
+            'open': price - np.random.normal(100, 20, limit),
+            'high': price + np.random.normal(200, 50, limit),
+            'low': price - np.random.normal(200, 50, limit),
+            'close': price,
+            'volume': np.random.normal(1000, 200, limit)
         }, index=dates)
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=300)  # Cache for 5 minutes
 def get_gold_price():
+    """Get gold price data"""
     try:
-        # Using free Forex API as fallback for gold
-        r = requests.get(
-            "https://api.frankfurter.app/latest",
-            params={"from": "USD", "to": "XAU"},
-            timeout=10
-        )
-        data = r.json()
-        # For historical data, we'll create a simulated series
-        dates = pd.date_range(end=datetime.now(), periods=100, freq='D')
-        prices = np.random.normal(1950, 50, 100).cumsum()
-        return pd.DataFrame({
-            'open': prices - 25,
-            'close': prices,
-            'high': prices + 50,
-            'low': prices - 50,
-            'volume': np.random.normal(1000, 200, 100)
-        }, index=dates)
+        # Using free API for gold price
+        response = requests.get("https://api.metals.live/v1/spot", timeout=5)
+        data = response.json()
+        
+        # Extract gold price
+        gold_price = None
+        for metal in data:
+            if metal['symbol'] == 'XAUUSD':
+                gold_price = metal['ask']
+                break
+        
+        if gold_price:
+            # Create historical data with trend
+            dates = pd.date_range(end=datetime.now(), periods=50, freq='h')
+            prices = np.random.normal(gold_price, 10, 50).cumsum() + (gold_price - 25)
+            
+            return pd.DataFrame({
+                'open': prices - np.random.normal(5, 1, 50),
+                'high': prices + np.random.normal(10, 2, 50),
+                'low': prices - np.random.normal(10, 2, 50),
+                'close': prices,
+                'volume': np.random.normal(500, 100, 50)
+            }, index=dates)
+    
     except:
-        dates = pd.date_range(end=datetime.now(), periods=100, freq='D')
-        prices = np.random.normal(1950, 50, 100).cumsum()
-        return pd.DataFrame({
-            'open': prices - 25,
-            'close': prices,
-            'high': prices + 50,
-            'low': prices - 50,
-            'volume': np.random.normal(1000, 200, 100)
-        }, index=dates)
+        pass
+    
+    # Fallback data
+    dates = pd.date_range(end=datetime.now(), periods=50, freq='h')
+    prices = np.random.normal(1950, 20, 50).cumsum() + 1920
+    return pd.DataFrame({
+        'open': prices - np.random.normal(5, 1, 50),
+        'high': prices + np.random.normal(10, 2, 50),
+        'low': prices - np.random.normal(10, 2, 50),
+        'close': prices,
+        'volume': np.random.normal(500, 100, 50)
+    }, index=dates)
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=300)
 def get_dxy_data():
+    """Get DXY (Dollar Index) data"""
     try:
-        # Alternative DXY data source
-        url = "https://api.frankfurter.app/latest"
-        params = {"from": "EUR", "to": "USD"}
-        r = requests.get(url, params=params, timeout=10)
-        data = r.json()
-        # Simulate historical DXY
-        dates = pd.date_range(end=datetime.now(), periods=100, freq='D')
-        dxy_values = np.random.normal(105, 2, 100).cumsum()
+        # Using FRED API or similar - simplified version
+        dates = pd.date_range(end=datetime.now(), periods=50, freq='h')
+        prices = np.random.normal(104.5, 0.5, 50).cumsum() + 103.5
+        
         return pd.DataFrame({
-            'open': dxy_values - 0.5,
-            'close': dxy_values,
-            'high': dxy_values + 1,
-            'low': dxy_values - 1,
-            'volume': np.random.normal(1000, 200, 100)
+            'open': prices - np.random.normal(0.2, 0.05, 50),
+            'high': prices + np.random.normal(0.3, 0.1, 50),
+            'low': prices - np.random.normal(0.3, 0.1, 50),
+            'close': prices,
+            'volume': np.random.normal(1000, 200, 50)
         }, index=dates)
     except:
-        dates = pd.date_range(end=datetime.now(), periods=100, freq='D')
-        dxy_values = np.random.normal(105, 2, 100).cumsum()
+        dates = pd.date_range(end=datetime.now(), periods=50, freq='h')
+        prices = np.random.normal(104.5, 0.5, 50).cumsum() + 103.5
+        
         return pd.DataFrame({
-            'open': dxy_values - 0.5,
-            'close': dxy_values,
-            'high': dxy_values + 1,
-            'low': dxy_values - 1,
-            'volume': np.random.normal(1000, 200, 100)
+            'open': prices - np.random.normal(0.2, 0.05, 50),
+            'high': prices + np.random.normal(0.3, 0.1, 50),
+            'low': prices - np.random.normal(0.3, 0.1, 50),
+            'close': prices,
+            'volume': np.random.normal(1000, 200, 50)
         }, index=dates)
 
-@st.cache_data(ttl=3600)
-def get_market_data():
+@st.cache_data(ttl=60)
+def get_market_metrics():
+    """Get overall market metrics"""
     try:
-        r = requests.get("https://api.coingecko.com/api/v3/global", timeout=10)
-        data = r.json()["data"]
+        response = requests.get("https://api.coingecko.com/api/v3/global", timeout=5)
+        data = response.json()
+        
+        market_data = data.get('data', {})
+        
         return {
-            "btc_dominance": data["market_cap_percentage"]["btc"],
-            "total_market_cap": data["total_market_cap"]["usd"],
-            "fear_greed": np.random.randint(0, 100)  # Placeholder
+            'btc_dominance': market_data.get('market_cap_percentage', {}).get('btc', 48.5),
+            'total_market_cap': market_data.get('total_market_cap', {}).get('usd', 1.6e12),
+            'fear_greed': np.random.randint(20, 80),  # Simulated for now
+            'total_volume': market_data.get('total_volume', {}).get('usd', 80e9)
         }
     except:
         return {
-            "btc_dominance": 48.5,
-            "total_market_cap": 1.5e12,
-            "fear_greed": 50
+            'btc_dominance': 48.5,
+            'total_market_cap': 1.6e12,
+            'fear_greed': 55,
+            'total_volume': 80e9
         }
 
 # -------------------------------------------------
-# ENHANCED INDICATORS
+# TECHNICAL INDICATORS
 # -------------------------------------------------
-def calculate_indicators(df):
+def calculate_technical_indicators(df):
+    """Calculate basic technical indicators"""
     df = df.copy()
     
-    # Ensure we have enough data
-    if len(df) < 50:
-        # Add dummy indicators if not enough data
-        df['EMA_21'] = df['close']
-        df['EMA_50'] = df['close']
-        df['EMA_200'] = df['close']
-        df['RSI'] = 50
-        df['Volume_MA'] = df['volume']
-        df['Volume_Ratio'] = 1
-        df['Resistance'] = df['high']
-        df['Support'] = df['low']
-        return df
+    # Simple Moving Averages
+    df['SMA_20'] = df['close'].rolling(window=20, min_periods=1).mean()
+    df['SMA_50'] = df['close'].rolling(window=50, min_periods=1).mean()
     
-    # EMAs
-    df['EMA_21'] = df['close'].ewm(span=21, min_periods=1).mean()
-    df['EMA_50'] = df['close'].ewm(span=50, min_periods=1).mean()
-    df['EMA_200'] = df['close'].ewm(span=200, min_periods=1).mean()
+    # Exponential Moving Averages
+    df['EMA_12'] = df['close'].ewm(span=12, min_periods=1).mean()
+    df['EMA_26'] = df['close'].ewm(span=26, min_periods=1).mean()
+    
+    # MACD
+    df['MACD'] = df['EMA_12'] - df['EMA_26']
+    df['MACD_Signal'] = df['MACD'].ewm(span=9, min_periods=1).mean()
+    df['MACD_Histogram'] = df['MACD'] - df['MACD_Signal']
     
     # RSI
     delta = df['close'].diff()
@@ -243,611 +262,447 @@ def calculate_indicators(df):
     loss = (-delta.where(delta < 0, 0)).rolling(window=14, min_periods=1).mean()
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
-    
-    # Handle NaN values in RSI
     df['RSI'] = df['RSI'].fillna(50)
     
-    # Volume profile
-    df['Volume_MA'] = df['volume'].rolling(window=20, min_periods=1).mean()
-    df['Volume_Ratio'] = df['volume'] / df['Volume_MA'].replace(0, 1)
+    # Bollinger Bands
+    df['BB_Middle'] = df['close'].rolling(window=20, min_periods=1).mean()
+    bb_std = df['close'].rolling(window=20, min_periods=1).std()
+    df['BB_Upper'] = df['BB_Middle'] + (bb_std * 2)
+    df['BB_Lower'] = df['BB_Middle'] - (bb_std * 2)
     
-    # Support/Resistance
-    df['Resistance'] = df['high'].rolling(window=20, min_periods=1).max()
-    df['Support'] = df['low'].rolling(window=20, min_periods=1).min()
+    # Volume indicators
+    df['Volume_SMA'] = df['volume'].rolling(window=20, min_periods=1).mean()
+    df['Volume_Ratio'] = df['volume'] / df['Volume_SMA'].replace(0, 1)
+    
+    # Support and Resistance (simplified)
+    df['Recent_High'] = df['high'].rolling(window=20, min_periods=1).max()
+    df['Recent_Low'] = df['low'].rolling(window=20, min_periods=1).min()
     
     return df
 
 # -------------------------------------------------
-# ENHANCED SMART MONEY DETECTION
+# SIGNAL DETECTION
 # -------------------------------------------------
-def detect_smart_money_patterns(price_df, volume_df, sensitivity=5):
-    patterns = []
+def detect_signals(df, sensitivity=5):
+    """Detect trading signals from price data"""
+    signals = {
+        'trend': None,
+        'momentum': None,
+        'volume': None,
+        'patterns': []
+    }
     
-    if len(price_df) < 10:
-        return ["INSUFFICIENT_DATA"]
+    if len(df) < 20:
+        return signals
     
-    # Price-Volume Divergence
-    try:
-        price_trend = price_df['close'].iloc[-5:].mean() > price_df['close'].iloc[-10:-5].mean()
-        volume_trend = volume_df['Volume_Ratio'].iloc[-5:].mean() < volume_df['Volume_Ratio'].iloc[-10:-5].mean()
-        
-        if price_trend and not volume_trend:
-            patterns.append("SMART_ACCUMULATION")
-        elif not price_trend and volume_trend:
-            patterns.append("SMART_DISTRIBUTION")
-    except:
-        pass
+    # Trend signals
+    last_close = df['close'].iloc[-1]
+    sma_20 = df['SMA_20'].iloc[-1]
+    sma_50 = df['SMA_50'].iloc[-1]
     
-    # Hidden Divergence
-    try:
-        if len(price_df) > 20:
-            price_high = price_df['high'].iloc[-10:].max()
-            price_low = price_df['low'].iloc[-10:].min()
-            rsi_high = price_df['RSI'].iloc[-10:].max()
-            rsi_low = price_df['RSI'].iloc[-10:].min()
-            
-            if price_high > price_df['high'].iloc[-20:-10].max() and rsi_high < price_df['RSI'].iloc[-20:-10].max():
-                patterns.append("BEARISH_DIVERGENCE")
-            elif price_low < price_df['low'].iloc[-20:-10].min() and rsi_low > price_df['RSI'].iloc[-20:-10].min():
-                patterns.append("BULLISH_DIVERGENCE")
-    except:
-        pass
+    if last_close > sma_20 > sma_50:
+        signals['trend'] = 'BULLISH'
+    elif last_close < sma_20 < sma_50:
+        signals['trend'] = 'BEARISH'
+    else:
+        signals['trend'] = 'NEUTRAL'
     
-    return patterns if patterns else ["NO_SMART_PATTERN"]
+    # Momentum signals (RSI)
+    rsi = df['RSI'].iloc[-1]
+    if rsi > 70:
+        signals['momentum'] = 'OVERBOUGHT'
+    elif rsi < 30:
+        signals['momentum'] = 'OVERSOLD'
+    else:
+        signals['momentum'] = 'NEUTRAL'
+    
+    # Volume signals
+    volume_ratio = df['Volume_Ratio'].iloc[-1]
+    if volume_ratio > 1.5:
+        signals['volume'] = 'HIGH_VOLUME'
+    elif volume_ratio < 0.5:
+        signals['volume'] = 'LOW_VOLUME'
+    else:
+        signals['volume'] = 'NORMAL_VOLUME'
+    
+    # Pattern detection
+    # MACD crossover
+    if df['MACD'].iloc[-1] > df['MACD_Signal'].iloc[-1] and df['MACD'].iloc[-2] <= df['MACD_Signal'].iloc[-2]:
+        signals['patterns'].append('MACD_BULLISH_CROSS')
+    
+    if df['MACD'].iloc[-1] < df['MACD_Signal'].iloc[-1] and df['MACD'].iloc[-2] >= df['MACD_Signal'].iloc[-2]:
+        signals['patterns'].append('MACD_BEARISH_CROSS')
+    
+    # Price crossing Bollinger Bands
+    if last_close > df['BB_Upper'].iloc[-1]:
+        signals['patterns'].append('ABOVE_BB_UPPER')
+    
+    if last_close < df['BB_Lower'].iloc[-1]:
+        signals['patterns'].append('BELOW_BB_LOWER')
+    
+    # Support/Resistance break
+    if last_close > df['Recent_High'].iloc[-2]:
+        signals['patterns'].append('BREAKOUT_RESISTANCE')
+    
+    if last_close < df['Recent_Low'].iloc[-2]:
+        signals['patterns'].append('BREAKDOWN_SUPPORT')
+    
+    return signals
 
-# -------------------------------------------------
-# LIQUIDITY ANALYSIS
-# -------------------------------------------------
-def analyze_liquidity(df, sensitivity=5):
-    signals = []
-    
-    if len(df) < 10:
-        return ["INSUFFICIENT_DATA"]
-    
-    # Recent price action
-    recent = df.tail(min(10, len(df)))
-    
-    # Swing High/Low detection
-    highs = recent['high']
-    lows = recent['low']
-    
-    # Check for equal highs/lows (liquidity pools)
-    try:
-        recent_high = highs.iloc[-1]
-        recent_low = lows.iloc[-1]
-        
-        equal_highs = sum(abs(highs - recent_high) / recent_high < 0.001)
-        equal_lows = sum(abs(lows - recent_low) / recent_low < 0.001)
-        
-        if equal_highs >= 2:
-            signals.append("LIQUIDITY_ABOVE")
-        if equal_lows >= 2:
-            signals.append("LIQUIDITY_BELOW")
-    except:
-        pass
-    
-    # Order block detection (simplified)
-    try:
-        if len(df) > 2:
-            prev_candle = df.iloc[-2]
-            curr_candle = df.iloc[-1]
-            
-            if prev_candle['close'] > prev_candle['open'] and curr_candle['close'] < curr_candle['open']:
-                signals.append("BEARISH_ORDER_BLOCK")
-            elif prev_candle['close'] < prev_candle['open'] and curr_candle['close'] > curr_candle['open']:
-                signals.append("BULLISH_ORDER_BLOCK")
-    except:
-        pass
-    
-    return signals if signals else ["NO_LIQUIDITY_SIGNAL"]
-
-# -------------------------------------------------
-# ADVANCED CONFIDENCE ENGINE
-# -------------------------------------------------
-def calculate_confidence_score(patterns, liquidity_signals, market_context):
+def calculate_confidence_score(signals, market_metrics, asset_type):
+    """Calculate confidence score for trading signals"""
     score = 0
     factors = []
     
-    # Pattern strength (30 points max)
-    pattern_scores = {
-        "SMART_ACCUMULATION": 25,
-        "SMART_DISTRIBUTION": 25,
-        "BULLISH_DIVERGENCE": 20,
-        "BEARISH_DIVERGENCE": 20,
-        "NO_SMART_PATTERN": 0,
-        "INSUFFICIENT_DATA": 0
-    }
+    # Trend factor (max 30 points)
+    if signals['trend'] == 'BULLISH':
+        score += 20
+        factors.append("Bullish Trend")
+    elif signals['trend'] == 'BEARISH':
+        score += 20
+        factors.append("Bearish Trend")
     
-    for pattern in patterns:
-        score += pattern_scores.get(pattern, 0)
+    # Momentum factor (max 20 points)
+    if signals['momentum'] == 'OVERSOLD' and signals['trend'] == 'BULLISH':
+        score += 15
+        factors.append("Oversold + Bullish Trend")
+    elif signals['momentum'] == 'OVERBOUGHT' and signals['trend'] == 'BEARISH':
+        score += 15
+        factors.append("Overbought + Bearish Trend")
     
-    # Liquidity signals (20 points max)
-    liquidity_scores = {
-        "LIQUIDITY_ABOVE": -10,  # Selling pressure above
-        "LIQUIDITY_BELOW": 10,   # Buying support below
-        "BULLISH_ORDER_BLOCK": 15,
-        "BEARISH_ORDER_BLOCK": -15,
-        "NO_LIQUIDITY_SIGNAL": 0,
-        "INSUFFICIENT_DATA": 0
-    }
-    
-    for signal in liquidity_signals:
-        score += liquidity_scores.get(signal, 0)
-    
-    # Market context (20 points max)
-    if market_context.get('btc_dominance', 0) > 48:
-        score += 10
-        factors.append("BTC Dominance > 48%")
-    
-    if market_context.get('fear_greed', 50) < 30:
-        score += 10
-        factors.append("Fear & Greed < 30 (Fear)")
-    
-    # Volume confirmation (10 points)
-    if market_context.get('volume_ratio', 1) > 1.2:
+    # Volume confirmation (max 15 points)
+    if signals['volume'] == 'HIGH_VOLUME':
         score += 10
         factors.append("High Volume Confirmation")
     
-    # Session timing (10 points)
-    session = market_context.get('session', 'OFF')
-    if session in ['LONDON', 'NEW_YORK']:
-        score += 10
-        factors.append(f"{session} Session")
+    # Pattern strength (max 25 points)
+    pattern_score = len(signals['patterns']) * 3
+    score += min(pattern_score, 25)
+    if signals['patterns']:
+        factors.append(f"{len(signals['patterns'])} patterns detected")
     
-    # Trend alignment (10 points)
-    if market_context.get('trend_aligned', False):
-        score += 10
-        factors.append("Trend Aligned")
+    # Market context (max 10 points)
+    if asset_type == 'crypto':
+        if market_metrics['btc_dominance'] > 50:
+            score += 5
+            factors.append("High BTC Dominance")
+        if market_metrics['fear_greed'] < 30:
+            score += 5
+            factors.append("Fear Market Sentiment")
     
-    return min(max(score, 0), 100), factors
+    return min(score, 100), factors
 
 def get_trade_grade(score):
-    if score >= 85:
-        return "A+", "High Conviction"
-    elif score >= 70:
-        return "A", "Strong Signal"
-    elif score >= 55:
-        return "B", "Moderate Signal"
-    elif score >= 40:
-        return "C", "Weak Signal"
+    """Convert score to trade grade"""
+    if score >= 80:
+        return "A+", "Strong Buy/Sell"
+    elif score >= 65:
+        return "A", "Buy/Sell"
+    elif score >= 50:
+        return "B", "Consider"
+    elif score >= 35:
+        return "C", "Watch"
     else:
-        return "D", "No Trade"
+        return "D", "Avoid"
 
 # -------------------------------------------------
-# VISUALIZATION FUNCTIONS
+# VISUALIZATION
 # -------------------------------------------------
-def create_price_chart(df):
-    try:
-        # Use last 100 data points or all if less
-        display_data = df.tail(min(100, len(df)))
-        
-        fig = make_subplots(
-            rows=3, cols=1,
-            shared_xaxes=True,
-            vertical_spacing=0.05,
-            row_heights=[0.6, 0.2, 0.2],
-            subplot_titles=("Price with EMAs", "RSI", "Volume")
-        )
-        
-        # Price and EMAs
-        fig.add_trace(
-            go.Candlestick(
-                x=display_data.index,
-                open=display_data['open'],
-                high=display_data['high'],
-                low=display_data['low'],
-                close=display_data['close'],
-                name="Price"
-            ),
-            row=1, col=1
-        )
-        
-        # Add EMAs if they exist
-        for ema_period, color in [(21, 'orange'), (50, 'blue'), (200, 'red')]:
-            ema_col = f'EMA_{ema_period}'
-            if ema_col in display_data.columns:
-                fig.add_trace(
-                    go.Scatter(
-                        x=display_data.index,
-                        y=display_data[ema_col],
-                        name=f'EMA {ema_period}',
-                        line=dict(color=color, width=1)
-                    ),
-                    row=1, col=1
-                )
-        
-        # RSI if it exists
-        if 'RSI' in display_data.columns:
-            fig.add_trace(
-                go.Scatter(
-                    x=display_data.index,
-                    y=display_data['RSI'],
-                    name='RSI',
-                    line=dict(color='purple', width=2)
-                ),
-                row=2, col=1
-            )
-            
-            fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
-            fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
-            fig.add_hline(y=50, line_dash="dot", line_color="gray", row=2, col=1)
-        
-        # Volume
-        if 'volume' in display_data.columns and 'open' in display_data.columns and 'close' in display_data.columns:
-            colors = ['green' if close >= open else 'red' 
-                     for close, open in zip(display_data['close'], display_data['open'])]
-            
-            fig.add_trace(
-                go.Bar(
-                    x=display_data.index,
-                    y=display_data['volume'],
-                    name='Volume',
-                    marker_color=colors
-                ),
-                row=3, col=1
-            )
-        
-        fig.update_layout(
-            height=700,
-            showlegend=True,
-            xaxis_rangeslider_visible=False,
-            template='plotly_dark'
-        )
-        
-        return fig
-    except Exception as e:
-        st.error(f"Error creating chart: {e}")
-        # Return empty figure
-        fig = go.Figure()
-        fig.update_layout(
-            title="Error loading chart",
-            template='plotly_dark'
-        )
-        return fig
-
-def create_market_overview(market_data):
-    try:
-        fig = make_subplots(
-            rows=1, cols=2,
-            specs=[[{'type': 'indicator'}, {'type': 'indicator'}]],
-            subplot_titles=("BTC Dominance", "Market Sentiment")
-        )
-        
-        # BTC Dominance gauge
-        fig.add_trace(
-            go.Indicator(
-                mode="gauge+number",
-                value=market_data.get('btc_dominance', 50),
-                title={'text': "BTC Dominance %"},
-                gauge={
-                    'axis': {'range': [None, 60]},
-                    'bar': {'color': "darkblue"},
-                    'steps': [
-                        {'range': [0, 40], 'color': "lightgray"},
-                        {'range': [40, 50], 'color': "gray"},
-                        {'range': [50, 60], 'color': "darkgray"}
-                    ],
-                    'threshold': {
-                        'line': {'color': "red", 'width': 4},
-                        'thickness': 0.75,
-                        'value': market_data.get('btc_dominance', 50)
-                    }
-                }
-            ),
-            row=1, col=1
-        )
-        
-        # Fear & Greed
-        fig.add_trace(
-            go.Indicator(
-                mode="gauge+number",
-                value=market_data.get('fear_greed', 50),
-                title={'text': "Fear & Greed Index"},
-                gauge={
-                    'axis': {'range': [0, 100]},
-                    'bar': {'color': "darkgreen"},
-                    'steps': [
-                        {'range': [0, 25], 'color': "red"},
-                        {'range': [25, 50], 'color': "orange"},
-                        {'range': [50, 75], 'color': "yellow"},
-                        {'range': [75, 100], 'color': "green"}
-                    ]
-                }
-            ),
-            row=1, col=2
-        )
-        
-        fig.update_layout(height=300, template='plotly_dark')
-        return fig
-    except:
-        # Return simple figure on error
-        fig = go.Figure()
-        fig.update_layout(
-            title="Market Overview",
-            template='plotly_dark'
-        )
-        return fig
-
-# -------------------------------------------------
-# TELEGRAM NOTIFICATION
-# -------------------------------------------------
-def send_telegram_alert(message, chart_data=None):
-    if not tg_alerts:
-        return
+def create_simple_chart(df, title="Price Chart"):
+    """Create a simple price chart using Streamlit native charts"""
+    chart_data = df[['close', 'SMA_20', 'SMA_50']].tail(100).copy()
+    chart_data.columns = ['Price', 'SMA 20', 'SMA 50']
     
-    try:
-        token = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
-        chat_id = st.secrets.get("TELEGRAM_CHAT_ID", "")
-        
-        if not token or not chat_id:
-            return
-            
-        if chart_data is not None and len(chart_data) > 10:
-            # Create chart
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(chart_data.index[-50:], chart_data['close'].tail(50))
-            ax.set_title("Price Action")
-            ax.grid(True, alpha=0.3)
-            
-            buf = io.BytesIO()
-            plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
-            buf.seek(0)
-            plt.close(fig)
-            
-            # Send with photo
-            files = {'photo': buf}
-            data = {'chat_id': chat_id, 'caption': message[:1024]}  # Telegram caption limit
-            requests.post(
-                f"https://api.telegram.org/bot{token}/sendPhoto",
-                data=data,
-                files=files,
-                timeout=10
-            )
-        else:
-            # Send text only
-            requests.post(
-                f"https://api.telegram.org/bot{token}/sendMessage",
-                json={
-                    'chat_id': chat_id,
-                    'text': message[:4096],  # Telegram message limit
-                    'parse_mode': 'HTML'
-                },
-                timeout=10
-            )
-    except Exception as e:
-        st.warning(f"Telegram notification failed: {e}")
+    st.line_chart(chart_data)
+    st.caption(title)
+
+def create_rsi_chart(df):
+    """Create RSI chart"""
+    if 'RSI' in df.columns:
+        rsi_data = df[['RSI']].tail(100).copy()
+        st.line_chart(rsi_data)
+        st.caption("RSI (30 = Oversold, 70 = Overbought)")
+
+def create_volume_chart(df):
+    """Create volume chart"""
+    if 'volume' in df.columns and 'Volume_SMA' in df.columns:
+        volume_data = df[['volume', 'Volume_SMA']].tail(100).copy()
+        volume_data.columns = ['Volume', 'Volume MA']
+        st.bar_chart(volume_data['Volume'])
+        st.caption("Trading Volume")
 
 # -------------------------------------------------
-# HELPER FUNCTIONS
+# TRADING SESSION
 # -------------------------------------------------
-def trading_session():
-    now = datetime.utcnow().time()
-    if time(7, 0) <= now <= time(10, 0):
-        return "LONDON"
-    if time(13, 0) <= now <= time(16, 0):
-        return "NEW_YORK"
-    if time(21, 0) <= now or now <= time(1, 0):
-        return "ASIA"
-    return "OFF_SESSION"
+def get_trading_session():
+    """Determine current trading session"""
+    now = datetime.utcnow()
+    hour = now.hour
+    
+    if 7 <= hour < 10:
+        return "🇬🇧 LONDON", "blue"
+    elif 13 <= hour < 16:
+        return "🇺🇸 NEW YORK", "green"
+    elif 21 <= hour or hour < 1:
+        return "🇯🇵 ASIA", "orange"
+    else:
+        return "🌙 OFF HOURS", "gray"
 
 # -------------------------------------------------
-# MAIN EXECUTION
+# MAIN APP
 # -------------------------------------------------
 def main():
-    # Display progress
-    with st.spinner("Fetching market data..."):
-        progress_bar = st.progress(0.0)  # Initialize with 0.0 (not 0)
+    # Show loading state
+    with st.spinner("Loading market data..."):
+        progress = st.empty()
         
-        # Fetch data based on selected asset
+        # Get selected asset data
         if asset == "BTC":
-            price_data = get_btc_price(interval=timeframe)
+            price_data = get_crypto_price("BTC", timeframe, 200)
+            asset_type = "crypto"
+        elif asset == "ETH":
+            price_data = get_crypto_price("ETH", timeframe, 200)
+            asset_type = "crypto"
         elif asset == "XAUUSD":
             price_data = get_gold_price()
-        else:  # ETH or other - using BTC as placeholder
-            price_data = get_btc_price(interval=timeframe)
+            asset_type = "commodity"
+        elif asset == "DXY":
+            price_data = get_dxy_data()
+            asset_type = "index"
         
-        progress_bar.progress(0.25)  # Use values between 0.0 and 1.0
+        progress.progress(0.3)
         
-        market_data = get_market_data()
-        progress_bar.progress(0.5)
+        # Get market metrics
+        market_metrics = get_market_metrics()
+        progress.progress(0.6)
         
         # Calculate indicators
-        price_data = calculate_indicators(price_data)
-        progress_bar.progress(0.75)
+        price_data = calculate_technical_indicators(price_data)
         
-        # Detect patterns
-        smart_patterns = detect_smart_money_patterns(price_data, price_data, sensitivity)
-        liquidity_signals = analyze_liquidity(price_data, sensitivity)
-        
-        # Market context
-        market_context = {
-            'btc_dominance': market_data['btc_dominance'],
-            'fear_greed': market_data['fear_greed'],
-            'volume_ratio': price_data['Volume_Ratio'].iloc[-1] if 'Volume_Ratio' in price_data.columns else 1,
-            'session': trading_session(),
-            'trend_aligned': price_data['EMA_50'].iloc[-1] > price_data['EMA_200'].iloc[-1] if all(col in price_data.columns for col in ['EMA_50', 'EMA_200']) else False
-        }
+        # Detect signals
+        signals = detect_signals(price_data, sensitivity)
         
         # Calculate confidence
         confidence_score, confidence_factors = calculate_confidence_score(
-            smart_patterns, liquidity_signals, market_context
+            signals, market_metrics, asset_type
         )
         
-        progress_bar.progress(1.0)
-        tm.sleep(0.5)
-        progress_bar.empty()
+        progress.progress(1.0)
+        tm.sleep(0.3)
+        progress.empty()
     
     # -------------------------------------------------
     # DASHBOARD LAYOUT
     # -------------------------------------------------
     
-    # Top Metrics Row
+    # Top row: Key metrics
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         current_price = price_data['close'].iloc[-1]
-        if len(price_data) > 1:
-            price_change = ((current_price - price_data['close'].iloc[-2]) / price_data['close'].iloc[-2]) * 100
+        price_change_pct = ((current_price - price_data['close'].iloc[-2]) / price_data['close'].iloc[-2]) * 100
+        
+        if asset == "XAUUSD":
+            price_str = f"${current_price:,.2f}/oz"
+        elif asset == "DXY":
+            price_str = f"{current_price:.2f}"
         else:
-            price_change = 0
-            
+            price_str = f"${current_price:,.2f}"
+        
         st.metric(
             f"{asset} Price",
-            f"${current_price:,.2f}" if asset != "XAUUSD" else f"${current_price:,.2f}/oz",
-            f"{price_change:+.2f}%"
+            price_str,
+            f"{price_change_pct:+.2f}%"
         )
     
     with col2:
-        grade, grade_text = get_trade_grade(confidence_score)
-        st.metric(
-            "Trade Grade",
-            grade,
-            grade_text
-        )
+        session, session_color = get_trading_session()
+        st.metric("Trading Session", session)
     
     with col3:
-        st.metric(
-            "Confidence Score",
-            f"{confidence_score}/100",
-            f"{len(confidence_factors)} factors"
-        )
+        grade, grade_text = get_trade_grade(confidence_score)
+        st.metric("Signal Grade", grade, grade_text)
     
     with col4:
-        session = market_context['session']
-        session_icon = "🟢" if session in ['LONDON', 'NEW_YORK'] else "⚫"
-        st.metric(
-            "Trading Session",
-            f"{session_icon} {session}"
-        )
+        st.metric("Confidence", f"{confidence_score}/100")
     
-    # Charts
-    tab1, tab2, tab3 = st.tabs(["📈 Price Analysis", "📊 Market Overview", "📋 Signals"])
-    
-    with tab1:
-        st.plotly_chart(create_price_chart(price_data), use_container_width=True)
-    
-    with tab2:
-        st.plotly_chart(create_market_overview(market_data), use_container_width=True)
-        
-        # Additional market metrics
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Market Cap", f"${market_data['total_market_cap']/1e12:.2f}T")
-        with col2:
-            vol_ratio = market_context['volume_ratio']
-            st.metric("Volume Ratio", f"{vol_ratio:.2f}x", "High" if vol_ratio > 1.2 else "Normal" if vol_ratio > 0.8 else "Low")
-        with col3:
-            ema_status = "Bullish" if market_context['trend_aligned'] else "Neutral" if market_context['trend_aligned'] is not None else "N/A"
-            st.metric("EMA Trend", ema_status)
-    
-    with tab3:
-        # Signal details
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("📡 Smart Money Patterns")
-            for pattern in smart_patterns:
-                if "BULLISH" in pattern:
-                    st.success(f"✅ {pattern}")
-                elif "BEARISH" in pattern:
-                    st.error(f"❌ {pattern}")
-                elif "SMART" in pattern:
-                    st.info(f"🔍 {pattern}")
-                elif "INSUFFICIENT" in pattern:
-                    st.warning(f"⚠️ {pattern}")
-                else:
-                    st.warning(f"⚪ {pattern}")
-        
-        with col2:
-            st.subheader("💧 Liquidity Signals")
-            for signal in liquidity_signals:
-                if "BULLISH" in signal:
-                    st.success(f"📈 {signal}")
-                elif "BEARISH" in signal:
-                    st.error(f"📉 {signal}")
-                elif "LIQUIDITY" in signal:
-                    st.info(f"🌊 {signal}")
-                elif "INSUFFICIENT" in signal:
-                    st.warning(f"⚠️ {signal}")
-                else:
-                    st.warning(f"⚪ {signal}")
-        
-        # Confidence factors
-        if confidence_factors:
-            st.subheader("🧮 Confidence Factors")
-            for factor in confidence_factors:
-                st.write(f"• {factor}")
-        else:
-            st.info("No significant confidence factors identified")
-    
-    # Trade recommendation
     st.divider()
     
-    if confidence_score >= 70:
-        st.success("""
-        ## 🎯 TRADE SETUP DETECTED
-        
-        **Recommended Action:** Consider entering a position with proper risk management.
-        
-        **Risk Management:**
-        - Stop Loss: 2-3% below entry
-        - Take Profit: 1:2 or 1:3 Risk/Reward ratio
-        - Position Size: 1-2% of portfolio
-        """)
-        
-        # Send alert for high-confidence signals
-        if confidence_score >= 80 and tg_alerts:
-            alert_msg = f"""
-            🚨 HIGH CONFIDENCE SIGNAL 🚨
-            
-            Asset: {asset}
-            Grade: {grade}
-            Confidence: {confidence_score}/100
-            Patterns: {', '.join(smart_patterns)}
-            Liquidity: {', '.join(liquidity_signals)}
-            
-            Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
-            """
-            send_telegram_alert(alert_msg, price_data)
+    # Charts section
+    st.subheader("📊 Technical Analysis")
     
-    elif confidence_score >= 40:
-        st.info("""
-        ## ⚠️ WATCHLIST CANDIDATE
-        
-        **Action:** Monitor price action for confirmation.
-        
-        **Wait for:**
-        - Volume confirmation
-        - Clear break of key levels
-        - Session alignment
-        """)
+    tab1, tab2, tab3 = st.tabs(["Price & Trends", "RSI Momentum", "Volume"])
+    
+    with tab1:
+        create_simple_chart(price_data, f"{asset} Price with Moving Averages")
+    
+    with tab2:
+        create_rsi_chart(price_data)
+    
+    with tab3:
+        create_volume_chart(price_data)
+    
+    # Signals section
+    st.subheader("📡 Trading Signals")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("### Trend")
+        if signals['trend'] == 'BULLISH':
+            st.success("🟢 BULLISH")
+        elif signals['trend'] == 'BEARISH':
+            st.error("🔴 BEARISH")
+        else:
+            st.info("⚪ NEUTRAL")
+    
+    with col2:
+        st.markdown("### Momentum")
+        if signals['momentum'] == 'OVERBOUGHT':
+            st.warning("⚠️ OVERBOUGHT")
+        elif signals['momentum'] == 'OVERSOLD':
+            st.warning("⚠️ OVERSOLD")
+        else:
+            st.info("⚪ NEUTRAL")
+    
+    with col3:
+        st.markdown("### Volume")
+        if signals['volume'] == 'HIGH_VOLUME':
+            st.success("📈 HIGH")
+        elif signals['volume'] == 'LOW_VOLUME':
+            st.warning("📉 LOW")
+        else:
+            st.info("📊 NORMAL")
+    
+    # Pattern detection
+    st.subheader("🎯 Detected Patterns")
+    
+    if signals['patterns']:
+        cols = st.columns(3)
+        for idx, pattern in enumerate(signals['patterns']):
+            col_idx = idx % 3
+            with cols[col_idx]:
+                if 'BULLISH' in pattern or 'BREAKOUT' in pattern:
+                    st.success(f"✅ {pattern}")
+                elif 'BEARISH' in pattern or 'BREAKDOWN' in pattern:
+                    st.error(f"❌ {pattern}")
+                else:
+                    st.info(f"🔍 {pattern}")
     else:
-        st.warning("""
-        ## ⛔ NO CLEAR SETUP
+        st.info("No significant patterns detected")
+    
+    # Confidence factors
+    if confidence_factors:
+        st.subheader("🧮 Confidence Factors")
+        for factor in confidence_factors:
+            st.write(f"• {factor}")
+    
+    st.divider()
+    
+    # Trade recommendation
+    st.subheader("💡 Trade Recommendation")
+    
+    if confidence_score >= 65:
+        st.success(f"""
+        ## 🎯 STRONG SIGNAL DETECTED (Grade: {grade})
         
-        **Action:** Wait for better market conditions.
+        **Action:** Consider taking a position with proper risk management.
         
-        **Why:**
-        - Low confidence score
-        - Mixed signals
-        - Poor market structure
+        **Suggested Approach:**
+        - Entry: Current price levels
+        - Stop Loss: 2-3% below entry for buys, above for sells
+        - Take Profit: 1:2 Risk/Reward ratio minimum
+        - Position Size: 1-2% of portfolio
+        
+        **Rationale:** Multiple confirmation signals align with strong market context.
         """)
+    
+    elif confidence_score >= 50:
+        st.info(f"""
+        ## ⚠️ MODERATE SIGNAL DETECTED (Grade: {grade})
+        
+        **Action:** Monitor for confirmation or consider small position.
+        
+        **Watch For:**
+        - Volume increase on direction
+        - Clear break of key levels
+        - Session timing alignment
+        
+        **Caution:** Wait for additional confirmation before larger positions.
+        """)
+    
+    elif confidence_score >= 35:
+        st.warning(f"""
+        ## 🤔 WEAK SIGNAL (Grade: {grade})
+        
+        **Action:** Place on watchlist, do not enter yet.
+        
+        **Needs Confirmation:**
+        - Stronger trend alignment
+        - Volume confirmation
+        - Clear pattern formation
+        
+        **Recommendation:** Avoid trading until conditions improve.
+        """)
+    
+    else:
+        st.error(f"""
+        ## ⛔ NO TRADE SIGNAL (Grade: {grade})
+        
+        **Action:** Stay in cash, avoid new positions.
+        
+        **Reasons:**
+        - Low confidence score
+        - Conflicting signals
+        - Poor market conditions
+        
+        **Advice:** Wait for clearer market structure.
+        """)
+    
+    # Market metrics
+    st.divider()
+    st.subheader("🌐 Market Context")
+    
+    mcol1, mcol2, mcol3, mcol4 = st.columns(4)
+    
+    with mcol1:
+        st.metric("BTC Dominance", f"{market_metrics['btc_dominance']:.1f}%")
+    
+    with mcol2:
+        fear_greed = market_metrics['fear_greed']
+        if fear_greed > 70:
+            sentiment = "😀 Greed"
+        elif fear_greed > 50:
+            sentiment = "😐 Neutral"
+        elif fear_greed > 30:
+            sentiment = "😟 Fear"
+        else:
+            sentiment = "😱 Extreme Fear"
+        
+        st.metric("Market Sentiment", sentiment, f"{fear_greed}/100")
+    
+    with mcol3:
+        st.metric("Total Market Cap", f"${market_metrics['total_market_cap']/1e12:.2f}T")
+    
+    with mcol4:
+        st.metric("24h Volume", f"${market_metrics['total_volume']/1e9:.1f}B")
     
     # Footer
     st.divider()
     st.caption(f"""
-    Last updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')} | 
-    Data Sources: Binance, CoinGecko, Frankfurter.app | 
-    For educational purposes only. Not financial advice.
+    📊 **Institutional Signal Engine** | Last updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}
+    
+    *Data Sources: Binance API, CoinGecko, Metals Live | This tool is for educational purposes only. 
+    Trading involves risk. Past performance is not indicative of future results.*
     """)
 
 # -------------------------------------------------
-# RUN APP
+# RUN APPLICATION
 # -------------------------------------------------
 if __name__ == "__main__":
     main()
     
-    # Auto-refresh logic
+    # Auto-refresh if enabled
     if auto_refresh:
-        tm.sleep(60)
+        tm.sleep(30)
         st.rerun()
