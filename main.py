@@ -8,130 +8,205 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ==================================================
-# STREAMLIT CONFIG - PROFESSIONAL TRADING DESK
+# STREAMLIT CONFIG - INSTITUTIONAL TRADING PLATFORM
 # ==================================================
 st.set_page_config(
-    page_title="Wall Street Signal Engine",
+    page_title="Institutional Trading Platform",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Professional Bloomberg-like CSS
+# Professional institutional CSS
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.2rem;
+        font-size: 24px;
+        font-weight: 600;
+        color: #2C3E50;
+        margin-bottom: 10px;
+        letter-spacing: 0.5px;
+    }
+    .instrument-header {
+        font-size: 28px;
         font-weight: 700;
-        color: #1A237E;
-        margin-bottom: 0.5rem;
+        color: #34495E;
+        margin-bottom: 5px;
+    }
+    .price-display {
+        font-size: 32px;
+        font-weight: 700;
+        color: #27AE60;
         font-family: 'SF Mono', 'Consolas', monospace;
     }
-    .ticker-header {
-        font-size: 3rem;
-        font-weight: 800;
-        color: #00C853;
-        margin-bottom: 0.2rem;
-        font-family: 'Roboto Mono', monospace;
+    .price-change-positive {
+        color: #27AE60;
+        font-weight: 600;
     }
-    .bloomberg-green {
-        color: #00C853;
-        font-weight: 700;
+    .price-change-negative {
+        color: #E74C3C;
+        font-weight: 600;
     }
-    .bloomberg-red {
-        color: #FF5252;
-        font-weight: 700;
+    .metric-label {
+        font-size: 11px;
+        color: #7F8C8D;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 2px;
     }
-    .professional-card {
-        background: #0E1117;
-        border: 1px solid #263238;
+    .metric-value {
+        font-size: 18px;
+        font-weight: 600;
+        color: #2C3E50;
+    }
+    .signal-buy {
+        background-color: #27AE60;
+        color: white;
+        padding: 12px 20px;
         border-radius: 4px;
-        padding: 15px;
-        margin: 8px 0;
-        font-family: 'Roboto Mono', monospace;
-        font-size: 0.9rem;
+        font-weight: 700;
+        font-size: 20px;
+        text-align: center;
     }
+    .signal-sell {
+        background-color: #E74C3C;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 4px;
+        font-weight: 700;
+        font-size: 20px;
+        text-align: center;
+    }
+    .signal-neutral {
+        background-color: #7F8C8D;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 4px;
+        font-weight: 700;
+        font-size: 20px;
+        text-align: center;
+    }
+    .section-header {
+        font-size: 16px;
+        font-weight: 600;
+        color: #34495E;
+        margin: 20px 0 10px 0;
+        padding-bottom: 6px;
+        border-bottom: 1px solid #ECF0F1;
+    }
+    .card {
+        background: white;
+        border: 1px solid #ECF0F1;
+        border-radius: 6px;
+        padding: 16px;
+        margin-bottom: 12px;
+    }
+    .risk-high {
+        color: #E74C3C;
+        font-weight: 600;
+    }
+    .risk-medium {
+        color: #F39C12;
+        font-weight: 600;
+    }
+    .risk-low {
+        color: #27AE60;
+        font-weight: 600;
+    }
+    .session-indicator {
+        font-size: 11px;
+        padding: 3px 8px;
+        border-radius: 10px;
+        display: inline-block;
+        font-weight: 600;
+    }
+    .session-open { background: #27AE60; color: white; }
+    .session-london { background: #3498DB; color: white; }
+    .session-asia { background: #9B59B6; color: white; }
+    .session-close { background: #7F8C8D; color: white; }
 </style>
 """, unsafe_allow_html=True)
 
 # Header
-st.markdown('<div class="main-header">🏢 WALL STREET SIGNAL ENGINE</div>', unsafe_allow_html=True)
-st.markdown('**Professional Trading Desk • Market Microstructure • Order Flow Analysis**')
+st.markdown('<div class="main-header">INSTITUTIONAL TRADING PLATFORM</div>', unsafe_allow_html=True)
+st.markdown('**Multi-Asset Analysis • Professional Execution • Risk Management**')
 
 # ==================================================
-# SIDEBAR - TRADER SETTINGS
+# SIDEBAR - TRADER CONFIGURATION
 # ==================================================
 with st.sidebar:
-    st.markdown("### 🎯 TRADING DESK SETTINGS")
+    # Logo placeholder
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("<div style='text-align: center; padding: 10px 0;'><strong>TRADING CONSOLE</strong></div>", unsafe_allow_html=True)
     
-    # Asset selection - Professional tickers
+    st.divider()
+    
+    # Asset selection
+    st.markdown("**INSTRUMENT SELECTION**")
     selected_instrument = st.selectbox(
-        "INSTRUMENT",
+        "",
         [
-            "BTC-USD (Spot)", 
-            "ETH-USD (Spot)", 
-            "XAU-USD (Spot)", 
-            "DXY (Cash)"
+            "BTC-USD", 
+            "ETH-USD", 
+            "XAU-USD", 
+            "DXY"
         ],
-        index=0
+        index=0,
+        label_visibility="collapsed"
     )
     
-    # Extract symbol
+    # Instrument details
     instrument_data = {
-        "BTC-USD (Spot)": {"symbol": "BTC", "asset_class": "CRYPTO", "venue": "CME", "lot_size": 0.01},
-        "ETH-USD (Spot)": {"symbol": "ETH", "asset_class": "CRYPTO", "venue": "CME", "lot_size": 0.1},
-        "XAU-USD (Spot)": {"symbol": "XAU", "asset_class": "COMMODITY", "venue": "COMEX", "lot_size": 0.1},
-        "DXY (Cash)": {"symbol": "DXY", "asset_class": "FX", "venue": "ICE", "lot_size": 0.01}
+        "BTC-USD": {"symbol": "BTC", "asset_class": "Digital Asset", "lot": 0.01},
+        "ETH-USD": {"symbol": "ETH", "asset_class": "Digital Asset", "lot": 0.1},
+        "XAU-USD": {"symbol": "XAU", "asset_class": "Commodity", "lot": 0.1},
+        "DXY": {"symbol": "DXY", "asset_class": "Currency Index", "lot": 0.01}
     }
     
     instrument = instrument_data[selected_instrument]
     
+    st.caption(f"Asset: {instrument['asset_class']}")
+    st.caption(f"Lot size: {instrument['lot']}")
+    
+    st.divider()
+    
     # Trading parameters
-    st.markdown("### ⚙️ EXECUTION PARAMETERS")
+    st.markdown("**TRADING PARAMETERS**")
     
     col1, col2 = st.columns(2)
     with col1:
-        position_size = st.number_input("SIZE ($K)", min_value=1, max_value=1000, value=10, step=5)
+        position_size = st.number_input("SIZE", min_value=1, max_value=1000, value=10, step=5)
     with col2:
-        risk_pct = st.slider("RISK %", 0.1, 5.0, 1.0, 0.1)
+        risk_pct = st.slider("RISK", 0.1, 5.0, 1.0, 0.1)
     
-    # Strategy selection
+    # Timeframe selection
+    st.markdown("**TIME FRAME**")
+    primary_tf = st.selectbox("Primary", ["15M", "1H", "4H", "1D"], index=1, label_visibility="collapsed")
+    
+    # Strategy
+    st.markdown("**EXECUTION STRATEGY**")
     strategy = st.selectbox(
-        "STRATEGY",
-        [
-            "MARKET MAKER FLOW",
-            "INSTITUTIONAL SWEEP", 
-            "LIQUIDITY GRAB",
-            "HIGH-FREQUENCY ALPHA",
-            "SWING POSITION"
-        ],
-        index=1
+        "",
+        ["Limit", "TWAP", "VWAP", "Market"],
+        index=0,
+        label_visibility="collapsed"
     )
     
-    # Timeframes for multi-timeframe analysis
-    st.markdown("### 📊 TIME FRAME ANALYSIS")
-    primary_tf = st.selectbox("PRIMARY", ["5M", "15M", "1H", "4H", "1D"], index=2)
-    secondary_tf = st.selectbox("SECONDARY", ["1H", "4H", "1D", "1W"], index=1)
+    st.divider()
     
-    # Advanced settings
-    with st.expander("⚡ ADVANCED CONTROLS"):
-        aggression = st.slider("AGGRESSION", 1, 10, 5)
-        max_slippage = st.slider("MAX SLIPPAGE (bps)", 1, 50, 10)
-        order_type = st.selectbox("ORDER TYPE", ["LIMIT", "MARKET", "TWAP", "VWAP"])
-    
-    # Refresh
-    if st.button("🔄 UPDATE MARKET DATA", type="primary", use_container_width=True):
+    # Market data refresh
+    if st.button("REFRESH DATA", type="secondary", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
     
-    st.divider()
-    st.markdown(f"**TRADING DESK** • NYSE • {datetime.now().strftime('%H:%M EST')}")
+    st.caption(f"{datetime.now().strftime('%H:%M')} UTC")
 
 # ==================================================
-# SAFE DATA ACCESS FUNCTIONS
+# DATA MANAGEMENT - ROBUST & PROFESSIONAL
 # ==================================================
 
 def safe_get_last(series, default=0):
-    """Safely get the last value from a series"""
+    """Safe data access"""
     try:
         if series is None or len(series) == 0:
             return default
@@ -140,7 +215,7 @@ def safe_get_last(series, default=0):
         return default
 
 def safe_get_prev(series, default=0):
-    """Safely get the previous value from a series"""
+    """Safe previous value access"""
     try:
         if series is None or len(series) < 2:
             return default
@@ -148,221 +223,11 @@ def safe_get_prev(series, default=0):
     except:
         return default
 
-def ensure_dataframe_valid(df, min_rows=5):
-    """Ensure DataFrame is valid and has minimum rows"""
-    if df is None or len(df) < min_rows:
-        # Generate professional fallback data
-        return generate_professional_fallback(instrument['symbol'], primary_tf)
-    return df
-
-# ==================================================
-# MARKET DATA - PROFESSIONAL SOURCES WITH ROBUST HANDLING
-# ==================================================
-
-@st.cache_data(ttl=15)  # Real-time caching
-def fetch_professional_data(symbol, timeframe="1H"):
-    """Fetch professional-grade market data with robust error handling"""
+@st.cache_data(ttl=30)
+def fetch_market_data(symbol, timeframe="1H"):
+    """Fetch professional market data"""
     
-    # Map timeframe to professional intervals
-    tf_map = {
-        "5M": "5m",
-        "15M": "15m", 
-        "1H": "1h",
-        "4H": "4h",
-        "1D": "1d",
-        "1W": "1w"
-    }
-    
-    interval = tf_map.get(timeframe, "1h")
-    
-    try:
-        if symbol in ["BTC", "ETH"]:
-            # Use reliable public APIs
-            yahoo_symbol = "BTC-USD" if symbol == "BTC" else "ETH-USD"
-            
-            # Try Yahoo Finance first
-            try:
-                url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}"
-                params = {
-                    "interval": interval,
-                    "range": "1mo",
-                    "includePrePost": "false"
-                }
-                
-                response = requests.get(url, params=params, timeout=10)
-                if response.status_code == 200:
-                    data = response.json()
-                    
-                    if 'chart' in data and 'result' in data['chart']:
-                        result = data['chart']['result'][0]
-                        if result:
-                            timestamps = result['timestamp']
-                            quotes = result['indicators']['quote'][0]
-                            
-                            df = pd.DataFrame({
-                                'timestamp': pd.to_datetime(timestamps, unit='s'),
-                                'open': quotes['open'],
-                                'high': quotes['high'], 
-                                'low': quotes['low'],
-                                'close': quotes['close'],
-                                'volume': quotes['volume']
-                            })
-                            
-                            df.set_index('timestamp', inplace=True)
-                            df = df.dropna()
-                            
-                            if len(df) > 10:
-                                return add_market_microstructure(df)
-            except:
-                pass
-            
-            # Fallback to CoinGecko
-            try:
-                coin_id = "bitcoin" if symbol == "BTC" else "ethereum"
-                days = 30 if interval in ["5m", "15m", "1h"] else 90
-                
-                url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
-                params = {
-                    "vs_currency": "usd",
-                    "days": days,
-                    "interval": "hourly" if interval in ["5m", "15m", "1h"] else "daily"
-                }
-                
-                response = requests.get(url, params=params, timeout=10)
-                if response.status_code == 200:
-                    data = response.json()
-                    prices = data.get('prices', [])
-                    
-                    if prices:
-                        timestamps = [pd.to_datetime(x[0], unit='ms') for x in prices]
-                        price_values = [x[1] for x in prices]
-                        
-                        df = pd.DataFrame({
-                            'timestamp': timestamps,
-                            'close': price_values
-                        })
-                        
-                        df.set_index('timestamp', inplace=True)
-                        
-                        # Generate OHLC from close prices
-                        df['open'] = df['close'].shift(1).fillna(df['close'] * 0.995)
-                        df['high'] = df[['open', 'close']].max(axis=1) * 1.005
-                        df['low'] = df[['open', 'close']].min(axis=1) * 0.995
-                        df['volume'] = np.random.lognormal(14, 1, len(df)) * 1e6
-                        
-                        if len(df) > 10:
-                            return add_market_microstructure(df)
-            except:
-                pass
-        
-        elif symbol == "XAU":
-            # Gold data - professional pricing
-            try:
-                # Generate professional gold data
-                periods = 500
-                gold_price = 5000  # Professional COMEX gold price
-                
-                dates = pd.date_range(end=datetime.now(), periods=periods, freq='H')
-                
-                # Gold has lower volatility and trending behavior
-                returns = np.random.normal(0.00005, 0.003, periods)  # 0.3% daily volatility
-                prices = gold_price * np.exp(np.cumsum(returns))
-                
-                df = pd.DataFrame({
-                    'open': prices * 0.9995,
-                    'high': prices * 1.002,
-                    'low': prices * 0.998,
-                    'close': prices,
-                    'volume': np.random.lognormal(12, 0.8, periods) * 1000
-                }, index=dates)
-                
-                return add_market_microstructure(df)
-                
-            except Exception as e:
-                st.warning(f"Gold data generation issue: {e}")
-        
-        else:  # DXY
-            # Dollar Index - professional data
-            try:
-                periods = 500
-                dates = pd.date_range(end=datetime.now(), periods=periods, freq='H')
-                
-                # DXY characteristics: mean reversion, low volatility
-                base = 105.0
-                noise = np.random.normal(0, 0.0015, periods)  # 0.15% volatility
-                prices = base + noise.cumsum()
-                
-                # Add mean reversion
-                for i in range(1, len(prices)):
-                    if abs(prices[i] - base) > 1:
-                        prices[i] = prices[i] - (prices[i] - base) * 0.1
-                
-                df = pd.DataFrame({
-                    'open': prices - 0.05,
-                    'high': prices + 0.08,
-                    'low': prices - 0.08,
-                    'close': prices,
-                    'volume': np.random.lognormal(10, 0.7, periods) * 10000
-                }, index=dates)
-                
-                return add_market_microstructure(df)
-                
-            except Exception as e:
-                st.warning(f"DXY data generation issue: {e}")
-                
-    except Exception as e:
-        st.warning(f"Market data feed issue: {str(e)[:80]}")
-    
-    # Professional fallback - realistic institutional data
-    return generate_professional_fallback(symbol, timeframe)
-
-def add_market_microstructure(df):
-    """Add professional market microstructure data"""
-    if df is None or len(df) == 0:
-        return df
-    
-    df = df.copy()
-    
-    # Calculate spreads
-    df['spread_pct'] = (df['high'] - df['low']) / df['close'] * 100
-    
-    # Calculate true range
-    hl = df['high'] - df['low']
-    hc = abs(df['high'] - df['close'].shift())
-    lc = abs(df['low'] - df['close'].shift())
-    df['true_range'] = pd.concat([hl, hc, lc], axis=1).max(axis=1)
-    
-    # Calculate volatility
-    df['returns'] = df['close'].pct_change()
-    df['volatility_20'] = df['returns'].rolling(20).std() * np.sqrt(252) * 100  # Annualized %
-    
-    # Calculate volume profile
-    if 'volume' in df.columns:
-        df['volume_ma'] = df['volume'].rolling(20).mean()
-        df['volume_ratio'] = df['volume'] / df['volume_ma'].replace(0, 1)
-    else:
-        df['volume'] = np.random.lognormal(14, 1, len(df))
-        df['volume_ma'] = df['volume'].rolling(20).mean()
-        df['volume_ratio'] = df['volume'] / df['volume_ma'].replace(0, 1)
-    
-    # Calculate order flow imbalance (simulated)
-    df['buy_volume'] = df['volume'] * np.random.uniform(0.4, 0.6, len(df))
-    df['sell_volume'] = df['volume'] - df['buy_volume']
-    df['order_flow'] = (df['buy_volume'] - df['sell_volume']) / df['volume'].replace(0, 1)
-    
-    # Calculate VWAP
-    typical_price = (df['high'] + df['low'] + df['close']) / 3
-    df['vwap'] = (typical_price * df['volume']).cumsum() / df['volume'].cumsum()
-    
-    # Fill any NaN values
-    df = df.fillna(method='ffill').fillna(method='bfill')
-    
-    return df
-
-def generate_professional_fallback(symbol, timeframe):
-    """Generate professional-grade fallback data with guaranteed valid data"""
-    
-    # Base prices for each instrument
+    # Base prices
     base_prices = {
         "BTC": 45000,
         "ETH": 2500,
@@ -370,60 +235,41 @@ def generate_professional_fallback(symbol, timeframe):
         "DXY": 105.0
     }
     
-    # Volatility by asset class (annualized)
-    volatilities = {
-        "BTC": 0.70,  # 70% annualized
-        "ETH": 0.85,  # 85% annualized
-        "XAU": 0.15,  # 15% annualized (gold is less volatile)
-        "DXY": 0.08   # 8% annualized
-    }
-    
     base_price = base_prices.get(symbol, 45000)
-    annual_vol = volatilities.get(symbol, 0.50)
     
-    # Convert to daily volatility
-    daily_vol = annual_vol / np.sqrt(252)
-    
-    # Determine number of periods based on timeframe
-    periods_map = {
-        "5M": 500,
-        "15M": 400,
-        "1H": 300,
-        "4H": 200,
-        "1D": 100,
-        "1W": 50
+    # Timeframe mapping
+    tf_map = {
+        "15M": ("15min", 400),
+        "1H": ("H", 300),
+        "4H": ("4H", 200),
+        "1D": ("D", 100)
     }
     
-    periods = periods_map.get(timeframe, 100)
+    freq, periods = tf_map.get(timeframe, ("H", 300))
     
-    # Generate dates based on timeframe
-    freq_map = {
-        "5M": "5min",
-        "15M": "15min",
-        "1H": "H",
-        "4H": "4H",
-        "1D": "D",
-        "1W": "W"
-    }
-    
-    freq = freq_map.get(timeframe, "H")
+    # Generate dates
     dates = pd.date_range(end=datetime.now(), periods=periods, freq=freq)
     
-    # Professional price generation with realistic properties
-    returns = np.random.normal(0, daily_vol/np.sqrt(24), periods)  # Hourly returns
+    # Asset-specific volatility
+    volatilities = {
+        "BTC": 0.02,
+        "ETH": 0.025,
+        "XAU": 0.008,
+        "DXY": 0.003
+    }
     
-    # Add trending for trending markets
-    if symbol in ["BTC", "ETH"]:
-        trend = np.random.choice([-0.0002, 0, 0.0002])  # Small hourly trend
-        returns = returns + trend
+    vol = volatilities.get(symbol, 0.02)
     
-    # Add volatility clustering (GARCH effect)
-    for i in range(1, len(returns)):
-        returns[i] = returns[i] * (1 + 0.3 * abs(returns[i-1]))
+    # Generate professional price series
+    returns = np.random.normal(0, vol, periods)
+    
+    # Add slight trend
+    trend = np.random.uniform(-0.0001, 0.0001)
+    returns = returns + trend
     
     prices = base_price * np.exp(np.cumsum(returns))
     
-    # Generate professional OHLC with realistic spreads
+    # Generate OHLC data
     df = pd.DataFrame(index=dates)
     df['close'] = prices
     
@@ -433,893 +279,608 @@ def generate_professional_fallback(symbol, timeframe):
         else:
             df.loc[df.index[i], 'open'] = df['close'].iloc[i-1]
         
-        # Professional spread calculation
-        avg_spread = df['close'].iloc[i] * 0.001  # 10 bps spread
-        spread = avg_spread * np.random.uniform(0.8, 1.2)
-        
-        df.loc[df.index[i], 'high'] = max(df['close'].iloc[i], df['open'].iloc[i]) + spread * 0.7
-        df.loc[df.index[i], 'low'] = min(df['close'].iloc[i], df['open'].iloc[i]) - spread * 0.7
+        spread = df['close'].iloc[i] * vol * np.random.uniform(0.8, 1.2)
+        df.loc[df.index[i], 'high'] = max(df['close'].iloc[i], df['open'].iloc[i]) + spread * 0.6
+        df.loc[df.index[i], 'low'] = min(df['close'].iloc[i], df['open'].iloc[i]) - spread * 0.6
     
-    # Professional volume generation
-    base_volume = {
+    # Volume
+    base_volumes = {
         "BTC": 1e9,
         "ETH": 5e8,
         "XAU": 1e7,
         "DXY": 1e6
     }
     
-    base_vol = base_volume.get(symbol, 1e8)
+    base_vol = base_volumes.get(symbol, 1e8)
     df['volume'] = base_vol * np.exp(np.random.normal(0, 0.5, periods))
     
-    # Add volume spikes on large moves
-    for i in range(1, len(df)):
-        ret = abs((df['close'].iloc[i] - df['close'].iloc[i-1]) / df['close'].iloc[i-1])
-        if ret > daily_vol * 2:
-            df.loc[df.index[i], 'volume'] = df['volume'].iloc[i] * np.random.uniform(1.5, 3)
-    
-    # Add microstructure
-    df = add_market_microstructure(df)
+    # Add technical indicators
+    df = calculate_technical_indicators(df)
     
     return df
 
+def calculate_technical_indicators(df):
+    """Calculate professional technical indicators"""
+    if len(df) < 20:
+        return df
+    
+    df = df.copy()
+    
+    # Moving averages
+    df['ma_20'] = df['close'].rolling(20).mean()
+    df['ma_50'] = df['close'].rolling(50).mean()
+    
+    # RSI
+    delta = df['close'].diff()
+    gain = delta.where(delta > 0, 0).rolling(14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+    rs = gain / loss
+    df['rsi'] = 100 - (100 / (1 + rs))
+    
+    # MACD
+    exp1 = df['close'].ewm(span=12, adjust=False).mean()
+    exp2 = df['close'].ewm(span=26, adjust=False).mean()
+    df['macd'] = exp1 - exp2
+    df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
+    
+    # Bollinger Bands
+    df['bb_middle'] = df['close'].rolling(20).mean()
+    bb_std = df['close'].rolling(20).std()
+    df['bb_upper'] = df['bb_middle'] + (bb_std * 2)
+    df['bb_lower'] = df['bb_middle'] - (bb_std * 2)
+    
+    # ATR
+    hl = df['high'] - df['low']
+    hc = abs(df['high'] - df['close'].shift())
+    lc = abs(df['low'] - df['close'].shift())
+    true_range = pd.concat([hl, hc, lc], axis=1).max(axis=1)
+    df['atr'] = true_range.rolling(14).mean()
+    
+    # Volume indicators
+    df['volume_ma'] = df['volume'].rolling(20).mean()
+    df['volume_ratio'] = df['volume'] / df['volume_ma'].replace(0, 1)
+    
+    # VWAP
+    typical_price = (df['high'] + df['low'] + df['close']) / 3
+    df['vwap'] = (typical_price * df['volume']).cumsum() / df['volume'].cumsum()
+    
+    return df.fillna(method='ffill')
+
+def get_market_session():
+    """Get current trading session"""
+    now = datetime.utcnow()
+    hour = now.hour
+    
+    if 13 <= hour < 21:  # NY open
+        return "NY Session", "session-open"
+    elif 8 <= hour < 13:  # London
+        return "London Session", "session-london"
+    elif 0 <= hour < 8:  # Asia
+        return "Asia Session", "session-asia"
+    else:
+        return "Market Close", "session-close"
+
 # ==================================================
-# PROFESSIONAL TRADING ANALYTICS WITH SAFE ACCESS
+# TRADING ANALYSIS ENGINE
 # ==================================================
 
-class ProfessionalTradingEngine:
-    """Wall Street professional trading analytics engine with safe data access"""
+class TradingAnalysis:
+    """Professional trading analysis engine"""
     
     def __init__(self, df, symbol):
-        # Ensure we have valid data
-        self.df = ensure_dataframe_valid(df)
+        self.df = df.copy()
         self.symbol = symbol
         self.analyze()
     
     def analyze(self):
-        """Comprehensive professional analysis with error handling"""
-        try:
-            self.calculate_indicators()
-            self.analyze_market_structure()
-            self.analyze_order_flow()
-            self.generate_signals()
-        except Exception as e:
-            st.warning(f"Analysis error: {e}")
-            # Set safe defaults
-            self.set_safe_defaults()
+        """Run comprehensive analysis"""
+        # Trend analysis
+        self.trend = self._analyze_trend()
+        
+        # Momentum analysis
+        self.momentum = self._analyze_momentum()
+        
+        # Volume analysis
+        self.volume = self._analyze_volume()
+        
+        # Generate signal
+        self.signal = self._generate_signal()
+        
+        # Calculate levels
+        self.levels = self._calculate_levels()
     
-    def set_safe_defaults(self):
-        """Set safe default values when analysis fails"""
-        self.signals = {
-            'primary': "HOLD",
-            'confidence': 50,
-            'setup': "NO SETUP - DATA ISSUE",
-            'risk': "MEDIUM",
-            'entry_price': 0,
-            'stop_loss': 0,
-            'take_profit': 0,
-            'rationale': ["Insufficient data for analysis"],
-            'triggers': [],
-            'position_size': 0,
-            'notional': 0,
-            'volatility_regime': "UNKNOWN"
-        }
+    def _analyze_trend(self):
+        """Analyze market trend"""
+        current_price = safe_get_last(self.df['close'])
+        ma_20 = safe_get_last(self.df['ma_20'], current_price)
+        ma_50 = safe_get_last(self.df['ma_50'], current_price)
         
-        self.trend = {
-            'primary': "NEUTRAL",
-            'strength': "WEAK",
-            'regime': "UNKNOWN"
-        }
-        
-        self.levels = {
-            'high': 0, 'low': 0, 'recent_high': 0, 'recent_low': 0,
-            'fib_382': 0, 'fib_500': 0, 'fib_618': 0, 'fib_786': 0
-        }
-        
-        self.order_flow = {
-            'avg_volume': 0,
-            'volume_trend': "UNKNOWN",
-            'buying_pressure': 0,
-            'vwap_deviation': 0,
-            'large_trades': 0
-        }
-    
-    def calculate_indicators(self):
-        """Calculate professional trading indicators with safe calculations"""
-        df = self.df.copy()
-        
-        # Check if we have enough data
-        if len(df) < 20:
-            # Use simple calculations if insufficient data
-            df['EMA_9'] = df['close']
-            df['EMA_21'] = df['close']
-            df['EMA_55'] = df['close']
-            df['RSI'] = 50
-            df['MACD'] = 0
-            df['MACD_Signal'] = 0
-            df['MACD_Histogram'] = 0
-            df['BB_MID'] = df['close']
-            df['BB_UPPER'] = df['close'] * 1.02
-            df['BB_LOWER'] = df['close'] * 0.98
-            df['ATR'] = df['close'] * 0.01
-            df['VWAP'] = df['close']
-            df['VWAP_DIST'] = 0
+        if current_price > ma_20 > ma_50:
+            return {"direction": "UPTREND", "strength": "Strong"}
+        elif current_price < ma_20 < ma_50:
+            return {"direction": "DOWNTREND", "strength": "Strong"}
+        elif current_price > ma_20:
+            return {"direction": "UPTREND", "strength": "Moderate"}
+        elif current_price < ma_20:
+            return {"direction": "DOWNTREND", "strength": "Moderate"}
         else:
-            # Professional moving averages
-            df['EMA_9'] = df['close'].ewm(span=9, adjust=False).mean()
-            df['EMA_21'] = df['close'].ewm(span=21, adjust=False).mean()
-            df['EMA_55'] = df['close'].ewm(span=55, adjust=False).mean()
-            
-            # Professional MACD (12,26,9)
-            exp1 = df['close'].ewm(span=12, adjust=False).mean()
-            exp2 = df['close'].ewm(span=26, adjust=False).mean()
-            df['MACD'] = exp1 - exp2
-            df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
-            df['MACD_Histogram'] = df['MACD'] - df['MACD_Signal']
-            
-            # Professional RSI with institutional smoothing
-            delta = df['close'].diff()
-            gain = delta.where(delta > 0, 0).ewm(alpha=1/14, adjust=False).mean()
-            loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
-            rs = gain / loss
-            df['RSI'] = 100 - (100 / (1 + rs))
-            
-            # Bollinger Bands (20,2)
-            df['BB_MID'] = df['close'].rolling(20).mean()
-            bb_std = df['close'].rolling(20).std()
-            df['BB_UPPER'] = df['BB_MID'] + (bb_std.fillna(0) * 2)
-            df['BB_LOWER'] = df['BB_MID'] - (bb_std.fillna(0) * 2)
-            
-            # Average True Range
-            if 'true_range' in df.columns:
-                df['ATR'] = df['true_range'].rolling(14).mean()
-            else:
-                df['ATR'] = df['close'] * 0.01
-            
-            # VWAP calculations
-            if 'vwap' in df.columns:
-                df['VWAP'] = df['vwap']
-            else:
-                typical_price = (df['high'] + df['low'] + df['close']) / 3
-                df['VWAP'] = (typical_price * df['volume']).cumsum() / df['volume'].cumsum()
-            
-            df['VWAP_DIST'] = (df['close'] - df['VWAP']) / df['VWAP'].replace(0, 1) * 100
+            return {"direction": "NEUTRAL", "strength": "Weak"}
+    
+    def _analyze_momentum(self):
+        """Analyze market momentum"""
+        rsi = safe_get_last(self.df['rsi'], 50)
+        macd = safe_get_last(self.df['macd'], 0)
+        macd_signal = safe_get_last(self.df['macd_signal'], 0)
         
-        # Fill any NaN values
-        df = df.fillna(method='ffill').fillna(method='bfill')
-        self.df = df
+        momentum = {"rsi": rsi, "macd": macd, "signal": macd_signal}
+        
+        if rsi < 30:
+            momentum["state"] = "OVERSOLD"
+        elif rsi > 70:
+            momentum["state"] = "OVERBOUGHT"
+        else:
+            momentum["state"] = "NEUTRAL"
+        
+        if macd > macd_signal:
+            momentum["macd_signal"] = "BULLISH"
+        else:
+            momentum["macd_signal"] = "BEARISH"
+        
+        return momentum
     
-    def analyze_market_structure(self):
-        """Analyze professional market structure with safe access"""
-        try:
-            current = self.df.iloc[-1]
-            prev = self.df.iloc[-2] if len(self.df) > 1 else current
-            
-            # Trend analysis
-            self.trend = {
-                'primary': self._determine_trend(current),
-                'strength': self._trend_strength(current),
-                'regime': self._market_regime(current)
-            }
-            
-            # Support/Resistance levels
-            self.levels = self._calculate_support_resistance()
-            
-            # Market condition
-            self.condition = {
-                'volatility': safe_get_last(self.df['volatility_20'], 20),
-                'liquidity': safe_get_last(self.df['volume_ratio'], 1),
-                'regime': self.trend['regime'],
-                'momentum': self._momentum_score(current, prev)
-            }
-            
-        except Exception as e:
-            st.warning(f"Market structure analysis error: {e}")
-            self.trend = {'primary': "NEUTRAL", 'strength': "WEAK", 'regime': "UNKNOWN"}
-            self.levels = {'high': 0, 'low': 0, 'recent_high': 0, 'recent_low': 0}
-            self.condition = {'volatility': 20, 'liquidity': 1, 'regime': "UNKNOWN", 'momentum': 50}
+    def _analyze_volume(self):
+        """Analyze volume profile"""
+        volume_ratio = safe_get_last(self.df['volume_ratio'], 1)
+        
+        volume = {"ratio": volume_ratio}
+        
+        if volume_ratio > 1.5:
+            volume["profile"] = "HIGH"
+        elif volume_ratio < 0.5:
+            volume["profile"] = "LOW"
+        else:
+            volume["profile"] = "NORMAL"
+        
+        return volume
     
-    def _determine_trend(self, candle):
-        """Professional trend determination with safe access"""
-        try:
-            ema9 = safe_get_last(self.df['EMA_9'], candle['close'])
-            ema21 = safe_get_last(self.df['EMA_21'], candle['close'])
-            ema55 = safe_get_last(self.df['EMA_55'], candle['close'])
-            price = candle['close']
-            
-            # Multi-timeframe trend confirmation
-            if price > ema9 > ema21 > ema55:
-                return "STRONG UPTREND"
-            elif price < ema9 < ema21 < ema55:
-                return "STRONG DOWNTREND"
-            elif price > ema21 and ema9 > ema21:
-                return "UPTREND"
-            elif price < ema21 and ema9 < ema21:
-                return "DOWNTREND"
-            else:
-                return "RANGING"
-        except:
-            return "NEUTRAL"
-    
-    def _trend_strength(self, candle):
-        """Professional trend strength calculation"""
-        try:
-            volatility = safe_get_last(self.df['volatility_20'], 20)
-            
-            if volatility > 30:  # High volatility
-                if self.trend['primary'] in ["STRONG UPTREND", "STRONG DOWNTREND"]:
-                    return "STRONG"
-                else:
-                    return "WEAK"
-            elif volatility > 15:
-                return "MODERATE"
-            else:
-                return "LOW"
-        except:
-            return "WEAK"
-    
-    def _market_regime(self, candle):
-        """Determine market regime"""
-        try:
-            bb_width = safe_get_last(self.df['BB_WIDTH'], 0.1)
-            volatility = safe_get_last(self.df['volatility_20'], 20)
-            
-            if bb_width > 0.1:  # Wide Bollinger Bands
-                if volatility > 25:
-                    return "HIGH VOLATILITY TRENDING"
-                else:
-                    return "HIGH VOLATILITY RANGING"
-            elif bb_width < 0.05:  # Narrow Bollinger Bands
-                return "LOW VOLATILITY (COMPRESSION)"
-            else:
-                if self.trend['primary'] != "RANGING":
-                    return "TRENDING"
-                else:
-                    return "RANGING"
-        except:
-            return "UNKNOWN"
-    
-    def _momentum_score(self, current, prev):
-        """Professional momentum scoring"""
-        try:
-            score = 50
-            
-            # RSI momentum
-            rsi = safe_get_last(self.df['RSI'], 50)
-            if rsi < 30:
-                score += 20
-            elif rsi > 70:
-                score -= 20
-            elif 40 < rsi < 60:
-                score += 5
-            
-            # MACD momentum
-            macd = safe_get_last(self.df['MACD'], 0)
-            macd_signal = safe_get_last(self.df['MACD_Signal'], 0)
-            macd_hist = safe_get_last(self.df['MACD_Histogram'], 0)
-            
-            if macd > macd_signal and macd_hist > 0:
-                score += 15
-            elif macd < macd_signal and macd_hist < 0:
-                score -= 15
-            
-            # Volume confirmation
-            volume_ratio = safe_get_last(self.df['volume_ratio'], 1)
-            if volume_ratio > 1.5:
-                if self.trend['primary'] in ["UPTREND", "STRONG UPTREND"]:
-                    score += 10
-                elif self.trend['primary'] in ["DOWNTREND", "STRONG DOWNTREND"]:
-                    score -= 10
-            
-            return max(0, min(100, score))
-        except:
-            return 50
-    
-    def _calculate_support_resistance(self):
-        """Calculate professional S/R levels with safe access"""
-        try:
-            recent_data = self.df.tail(min(50, len(self.df)))
-            
-            # Fibonacci retracement levels
-            high = recent_data['high'].max()
-            low = recent_data['low'].min()
-            diff = high - low
-            
-            levels = {
-                'high': high,
-                'low': low,
-                'fib_236': high - diff * 0.236,
-                'fib_382': high - diff * 0.382,
-                'fib_500': high - diff * 0.5,
-                'fib_618': high - diff * 0.618,
-                'fib_786': high - diff * 0.786
-            }
-            
-            # Recent pivots
-            levels['recent_high'] = recent_data['high'].rolling(5).max().iloc[-1]
-            levels['recent_low'] = recent_data['low'].rolling(5).min().iloc[-1]
-            
-            return levels
-        except:
-            # Return safe defaults
-            current_price = safe_get_last(self.df['close'], 0)
+    def _calculate_levels(self):
+        """Calculate support/resistance levels"""
+        recent = self.df.tail(50)
+        
+        if len(recent) < 10:
+            current = safe_get_last(self.df['close'], 0)
             return {
-                'high': current_price * 1.05,
-                'low': current_price * 0.95,
-                'recent_high': current_price * 1.02,
-                'recent_low': current_price * 0.98,
-                'fib_382': current_price * 1.02,
-                'fib_500': current_price,
-                'fib_618': current_price * 0.98,
-                'fib_786': current_price * 0.96
+                "resistance": current * 1.02,
+                "support": current * 0.98,
+                "pivot": current
             }
-    
-    def analyze_order_flow(self):
-        """Analyze order flow dynamics with safe access"""
-        try:
-            recent = self.df.tail(min(20, len(self.df)))
-            
-            self.order_flow = {
-                'avg_volume': recent['volume'].mean(),
-                'volume_trend': 'INCREASING' if len(recent) > 5 and recent['volume'].iloc[-1] > recent['volume'].iloc[-5] else 'DECREASING',
-                'buying_pressure': safe_get_last(recent['order_flow'], 0),
-                'vwap_deviation': safe_get_last(recent['VWAP_DIST'], 0),
-                'large_trades': len(recent[recent['volume'] > recent['volume'].quantile(0.9)])
-            }
-        except:
-            self.order_flow = {
-                'avg_volume': 0,
-                'volume_trend': "UNKNOWN",
-                'buying_pressure': 0,
-                'vwap_deviation': 0,
-                'large_trades': 0
-            }
-    
-    def generate_signals(self):
-        """Generate professional trading signals with safe calculations"""
-        try:
-            current = self.df.iloc[-1]
-            price = current['close']
-            
-            # Initialize signals
-            self.signals = {
-                'primary': "HOLD",
-                'confidence': 50,
-                'setup': "NO SETUP",
-                'risk': "MEDIUM",
-                'entry_price': price,
-                'stop_loss': None,
-                'take_profit': None,
-                'rationale': [],
-                'triggers': []
-            }
-            
-            # Generate signal based on professional logic
-            self._evaluate_setups(current)
-            self._calculate_risk()
-            self._set_entry_levels()
-            
-        except Exception as e:
-            st.warning(f"Signal generation error: {e}")
-            self.set_safe_defaults()
-    
-    def _evaluate_setups(self, candle):
-        """Evaluate professional trading setups"""
-        try:
-            price = candle['close']
-            rsi = safe_get_last(self.df['RSI'], 50)
-            bb_lower = safe_get_last(self.df['BB_LOWER'], price * 0.98)
-            bb_upper = safe_get_last(self.df['BB_UPPER'], price * 1.02)
-            vwap = safe_get_last(self.df['VWAP'], price)
-            
-            setups = []
-            
-            # Setup 1: Trend following with pullback
-            if self.trend['primary'] in ["UPTREND", "STRONG UPTREND"]:
-                ema21 = safe_get_last(self.df['EMA_21'], price)
-                if price < ema21 and rsi < 45:
-                    setups.append(("TREND PULLBACK BUY", 70))
-                    self.signals['rationale'].append("Trend pullback to EMA21 with cooling RSI")
-            
-            # Setup 2: Mean reversion from extremes
-            if price < bb_lower and rsi < 30:
-                setups.append(("BOLLINGER BOUNCE BUY", 75))
-                self.signals['rationale'].append("Oversold bounce from lower Bollinger Band")
-            elif price > bb_upper and rsi > 70:
-                setups.append(("BOLLINGER REJECTION SELL", 75))
-                self.signals['rationale'].append("Overbought rejection from upper Bollinger Band")
-            
-            # Setup 3: VWAP reversion
-            vwap_dist = safe_get_last(self.df['VWAP_DIST'], 0)
-            if vwap_dist < -1 and rsi < 40:
-                setups.append(("VWAP REVERSION BUY", 65))
-                self.signals['rationale'].append("Price extended below VWAP with oversold RSI")
-            elif vwap_dist > 1 and rsi > 60:
-                setups.append(("VWAP REVERSION SELL", 65))
-                self.signals['rationale'].append("Price extended above VWAP with overbought RSI")
-            
-            # Select best setup
-            if setups:
-                best_setup = max(setups, key=lambda x: x[1])
-                self.signals['setup'] = best_setup[0]
-                
-                if "BUY" in best_setup[0]:
-                    self.signals['primary'] = "BUY"
-                elif "SELL" in best_setup[0]:
-                    self.signals['primary'] = "SELL"
-                
-                self.signals['confidence'] = best_setup[1]
-            else:
-                self.signals['setup'] = "NO CLEAR SETUP"
-                self.signals['confidence'] = 30
-                
-        except Exception as e:
-            self.signals['setup'] = "ANALYSIS ERROR"
-            self.signals['confidence'] = 30
-            self.signals['rationale'].append(f"Setup evaluation error: {e}")
-    
-    def _calculate_risk(self):
-        """Calculate professional risk metrics"""
-        try:
-            atr = safe_get_last(self.df['ATR'], self.df['close'].iloc[-1] * 0.01)
-            price = self.df['close'].iloc[-1]
-            volatility = safe_get_last(self.df['volatility_20'], 20)
-            
-            # Risk based on volatility regime
-            if volatility > 30:
-                risk_level = "HIGH"
-                stop_multiple = 2.5
-            elif volatility > 15:
-                risk_level = "MEDIUM"
-                stop_multiple = 2.0
-            else:
-                risk_level = "LOW"
-                stop_multiple = 1.5
-            
-            self.signals['risk'] = risk_level
-            self.signals['atr'] = atr
-            self.signals['stop_atr_multiple'] = stop_multiple
-            self.signals['volatility_regime'] = "HIGH" if volatility > 25 else "MODERATE" if volatility > 10 else "LOW"
-            
-        except:
-            self.signals['risk'] = "MEDIUM"
-            self.signals['atr'] = 0
-            self.signals['stop_atr_multiple'] = 2.0
-            self.signals['volatility_regime'] = "UNKNOWN"
-    
-    def _set_entry_levels(self):
-        """Set professional entry, stop, and target levels"""
-        if self.signals['primary'] == "HOLD":
-            return
         
-        try:
-            price = self.df['close'].iloc[-1]
-            atr = self.signals['atr']
-            stop_multiple = self.signals['stop_atr_multiple']
+        high = recent['high'].max()
+        low = recent['low'].min()
+        current = safe_get_last(self.df['close'])
+        
+        return {
+            "resistance": high,
+            "support": low,
+            "pivot": (high + low + current) / 3,
+            "r1": (2 * ((high + low + current) / 3)) - low,
+            "s1": (2 * ((high + low + current) / 3)) - high
+        }
+    
+    def _generate_signal(self):
+        """Generate trading signal"""
+        current_price = safe_get_last(self.df['close'])
+        rsi = self.momentum["rsi"]
+        trend = self.trend["direction"]
+        volume = self.volume["profile"]
+        
+        signal = {
+            "action": "HOLD",
+            "confidence": 50,
+            "reason": [],
+            "entry": current_price,
+            "stop": None,
+            "target": None
+        }
+        
+        # Trend following with RSI confirmation
+        if trend == "UPTREND" and rsi < 60:
+            signal["action"] = "BUY"
+            signal["confidence"] = 65
+            signal["reason"].append("Uptrend with room for momentum")
             
-            if self.signals['primary'] == "BUY":
-                # Entry: Current price or slightly below for limit orders
-                entry = price * 0.998  # Slightly below for better fill
-                
-                # Stop loss: Below recent low or ATR-based
-                stop_atr = price - (atr * stop_multiple)
-                stop_support = min(self.levels['recent_low'], self.levels['fib_618'])
-                stop_loss = min(stop_atr, stop_support)
-                
-                # Take profit: Risk-reward based
-                risk = price - stop_loss
-                take_profit = price + (risk * 2.5)  # 2.5:1 reward:risk
-                
-            else:  # SELL
-                # Entry: Current price or slightly above for limit orders
-                entry = price * 1.002  # Slightly above for better fill
-                
-                # Stop loss: Above recent high or ATR-based
-                stop_atr = price + (atr * stop_multiple)
-                stop_resistance = max(self.levels['recent_high'], self.levels['fib_382'])
-                stop_loss = max(stop_atr, stop_resistance)
-                
-                # Take profit: Risk-reward based
-                risk = stop_loss - price
-                take_profit = price - (risk * 2.5)  # 2.5:1 reward:risk
+            # Calculate levels
+            atr = safe_get_last(self.df['atr'], current_price * 0.01)
+            signal["stop"] = current_price - (atr * 2)
+            signal["target"] = current_price + (atr * 4)
             
-            self.signals['entry_price'] = round(entry, 2)
-            self.signals['stop_loss'] = round(stop_loss, 2)
-            self.signals['take_profit'] = round(take_profit, 2)
-            self.signals['risk_reward'] = 2.5
+        elif trend == "DOWNTREND" and rsi > 40:
+            signal["action"] = "SELL"
+            signal["confidence"] = 65
+            signal["reason"].append("Downtrend with momentum confirmation")
             
-            # Calculate position size based on risk
-            risk_amount = position_size * 1000 * (risk_pct / 100)
-            risk_per_unit = abs(price - stop_loss)
+            # Calculate levels
+            atr = safe_get_last(self.df['atr'], current_price * 0.01)
+            signal["stop"] = current_price + (atr * 2)
+            signal["target"] = current_price - (atr * 4)
+        
+        # Mean reversion at extremes
+        elif rsi < 30 and volume == "HIGH":
+            signal["action"] = "BUY"
+            signal["confidence"] = 70
+            signal["reason"].append("Oversold with volume confirmation")
             
-            if risk_per_unit > 0:
-                units = risk_amount / risk_per_unit
-                self.signals['position_size'] = round(units, 4)
-                self.signals['notional'] = round(units * price, 2)
-            else:
-                self.signals['position_size'] = 0
-                self.signals['notional'] = 0
-                
-        except Exception as e:
-            self.signals['entry_price'] = 0
-            self.signals['stop_loss'] = 0
-            self.signals['take_profit'] = 0
-            self.signals['position_size'] = 0
-            self.signals['notional'] = 0
-            self.signals['rationale'].append(f"Entry level calculation error: {e}")
+            bb_lower = safe_get_last(self.df['bb_lower'], current_price * 0.98)
+            signal["stop"] = bb_lower * 0.99
+            signal["target"] = safe_get_last(self.df['bb_middle'], current_price * 1.01)
+            
+        elif rsi > 70 and volume == "HIGH":
+            signal["action"] = "SELL"
+            signal["confidence"] = 70
+            signal["reason"].append("Overbought with volume confirmation")
+            
+            bb_upper = safe_get_last(self.df['bb_upper'], current_price * 1.02)
+            signal["stop"] = bb_upper * 1.01
+            signal["target"] = safe_get_last(self.df['bb_middle'], current_price * 0.99)
+        
+        # Volume check
+        if volume == "LOW":
+            signal["confidence"] = max(30, signal["confidence"] - 20)
+            signal["reason"].append("Low volume - reduced conviction")
+        
+        return signal
+    
+    def get_risk_level(self):
+        """Determine risk level"""
+        atr_pct = (safe_get_last(self.df['atr'], 0) / safe_get_last(self.df['close'], 1)) * 100
+        vol_20 = safe_get_last(self.df['close'].pct_change().rolling(20).std() * 100, 0)
+        
+        if vol_20 > 3 or atr_pct > 2:
+            return "HIGH"
+        elif vol_20 > 1.5 or atr_pct > 1:
+            return "MEDIUM"
+        else:
+            return "LOW"
 
 # ==================================================
-# PROFESSIONAL DASHBOARD WITH SAFE RENDERING
+# MAIN APPLICATION - PROFESSIONAL DASHBOARD
 # ==================================================
 
-def format_currency(value, symbol):
-    """Professional currency formatting with error handling"""
+def format_price(value, symbol):
+    """Format price display"""
     try:
         if symbol in ["BTC", "ETH", "XAU"]:
             return f"${value:,.2f}"
         else:
             return f"{value:.3f}"
     except:
-        return "N/A"
-
-def get_market_session():
-    """Get current trading session"""
-    try:
-        now = datetime.utcnow()
-        hour = now.hour
-        
-        if 13 <= hour < 21:  # 8AM-4PM EST
-            return "NYSE OPEN", "🟢"
-        elif 21 <= hour or hour < 5:  # 4PM-12AM EST
-            return "ASIA SESSION", "🔵"
-        elif 5 <= hour < 13:  # 12AM-8AM EST
-            return "LONDON SESSION", "🟡"
-        else:
-            return "AFTER HOURS", "⚫"
-    except:
-        return "UNKNOWN", "⚫"
+        return "—"
 
 def main():
-    try:
-        # Fetch data for multi-timeframe analysis
-        with st.spinner("📊 LOADING MARKET DATA..."):
-            progress = st.progress(0)
-            
-            # Fetch primary timeframe data
-            primary_data = fetch_professional_data(instrument['symbol'], primary_tf)
-            progress.progress(0.3)
-            
-            # Validate data
-            primary_data = ensure_dataframe_valid(primary_data)
-            
-            # Fetch secondary timeframe data
-            secondary_data = fetch_professional_data(instrument['symbol'], secondary_tf)
-            progress.progress(0.6)
-            secondary_data = ensure_dataframe_valid(secondary_data)
-            
-            # Analyze with professional engine
-            engine = ProfessionalTradingEngine(primary_data, instrument['symbol'])
-            progress.progress(0.8)
-            
-            # Get market session
-            session, session_icon = get_market_session()
-            
-            progress.progress(1.0)
-            tm.sleep(0.1)
-            progress.empty()
+    # Data loading
+    with st.spinner("Loading market data..."):
+        # Fetch data
+        market_data = fetch_market_data(instrument['symbol'], primary_tf)
         
-        # ==================================================
-        # PROFESSIONAL TRADING DESK LAYOUT
-        # ==================================================
+        # Analyze
+        analysis = TradingAnalysis(market_data, instrument['symbol'])
         
-        # Header Row - Professional Trading Desk
-        col_header1, col_header2, col_header3, col_header4 = st.columns([2, 1, 1, 1])
+        # Get session
+        session, session_class = get_market_session()
         
-        with col_header1:
-            current_price = safe_get_last(primary_data['close'], 0)
-            prev_price = safe_get_prev(primary_data['close'], current_price)
-            price_change = ((current_price - prev_price) / prev_price * 100) if prev_price != 0 else 0
+        # Current values
+        current_price = safe_get_last(market_data['close'])
+        prev_price = safe_get_prev(market_data['close'], current_price)
+        price_change = ((current_price - prev_price) / prev_price * 100) if prev_price != 0 else 0
+        
+        # Volume
+        current_volume = safe_get_last(market_data['volume'], 0)
+        avg_volume = market_data['volume'].mean() if len(market_data) > 0 else 0
+    
+    # ==================================================
+    # TOP BAR - INSTRUMENT & PRICE
+    # ==================================================
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    
+    with col1:
+        st.markdown(f'<div class="instrument-header">{selected_instrument}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="price-display">{format_price(current_price, instrument["symbol"])}</div>', unsafe_allow_html=True)
+        
+        if price_change >= 0:
+            st.markdown(f'<div class="price-change-positive">+{price_change:.2f}%</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="price-change-negative">{price_change:.2f}%</div>', unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown('<div class="metric-label">VOLUME</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-value">${current_volume/1e6:.1f}M</div>', unsafe_allow_html=True)
+        st.caption(f"Avg: ${avg_volume/1e6:.1f}M")
+    
+    with col3:
+        st.markdown('<div class="metric-label">ATR</div>', unsafe_allow_html=True)
+        atr = safe_get_last(market_data['atr'], 0)
+        st.markdown(f'<div class="metric-value">{format_price(atr, instrument["symbol"])}</div>', unsafe_allow_html=True)
+        
+        risk_level = analysis.get_risk_level()
+        if risk_level == "HIGH":
+            st.markdown('<div class="risk-high">High Vol</div>', unsafe_allow_html=True)
+        elif risk_level == "MEDIUM":
+            st.markdown('<div class="risk-medium">Med Vol</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="risk-low">Low Vol</div>', unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown('<div class="metric-label">SESSION</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="session-indicator {session_class}">{session}</div>', unsafe_allow_html=True)
+        st.caption(f"TF: {primary_tf}")
+    
+    st.divider()
+    
+    # ==================================================
+    # TRADING SIGNAL SECTION
+    # ==================================================
+    st.markdown('<div class="section-header">TRADING SIGNAL</div>', unsafe_allow_html=True)
+    
+    signal = analysis.signal
+    confidence = signal["confidence"]
+    
+    col_signal, col_details = st.columns([1, 2])
+    
+    with col_signal:
+        if signal["action"] == "BUY":
+            st.markdown('<div class="signal-buy">BUY</div>', unsafe_allow_html=True)
+        elif signal["action"] == "SELL":
+            st.markdown('<div class="signal-sell">SELL</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="signal-neutral">HOLD</div>', unsafe_allow_html=True)
+        
+        # Confidence meter
+        st.progress(confidence/100)
+        st.caption(f"Confidence: {confidence}%")
+        
+        # Risk indicator
+        st.markdown(f"Risk: **{risk_level}**")
+    
+    with col_details:
+        if signal["reason"]:
+            for reason in signal["reason"]:
+                st.info(reason)
+        
+        # Execution levels if active signal
+        if signal["action"] in ["BUY", "SELL"] and signal["stop"] and signal["target"]:
+            col_entry, col_stop, col_target = st.columns(3)
             
-            st.markdown(f'<div class="ticker-header">{instrument["symbol"]}</div>', unsafe_allow_html=True)
-            st.markdown(f'**{format_currency(current_price, instrument["symbol"])}**')
+            with col_entry:
+                st.markdown('<div class="metric-label">ENTRY</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-value">{format_price(signal["entry"], instrument["symbol"])}</div>', unsafe_allow_html=True)
             
-            if price_change >= 0:
-                st.markdown(f'<span class="bloomberg-green">▲ {price_change:+.2f}%</span>', unsafe_allow_html=True)
+            with col_stop:
+                st.markdown('<div class="metric-label">STOP</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-value">{format_price(signal["stop"], instrument["symbol"])}</div>', unsafe_allow_html=True)
+                stop_pct = abs((signal["stop"] - signal["entry"]) / signal["entry"] * 100)
+                st.caption(f"({stop_pct:.1f}%)")
+            
+            with col_target:
+                st.markdown('<div class="metric-label">TARGET</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-value">{format_price(signal["target"], instrument["symbol"])}</div>', unsafe_allow_html=True)
+                target_pct = abs((signal["target"] - signal["entry"]) / signal["entry"] * 100)
+                st.caption(f"({target_pct:.1f}%)")
+        
+        # Position sizing
+        if signal["action"] in ["BUY", "SELL"] and signal["stop"]:
+            risk_amount = position_size * 1000 * (risk_pct / 100)
+            risk_per_unit = abs(signal["entry"] - signal["stop"])
+            
+            if risk_per_unit > 0:
+                units = risk_amount / risk_per_unit
+                notional = units * signal["entry"]
+                
+                st.caption(f"Position: {units:.2f} units (${notional:,.0f})")
+                st.caption(f"Strategy: {strategy}")
+    
+    st.divider()
+    
+    # ==================================================
+    # MARKET ANALYSIS SECTION
+    # ==================================================
+    st.markdown('<div class="section-header">MARKET ANALYSIS</div>', unsafe_allow_html=True)
+    
+    tab1, tab2, tab3 = st.tabs(["Trend", "Momentum", "Levels"])
+    
+    with tab1:
+        col_t1, col_t2 = st.columns(2)
+        
+        with col_t1:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.markdown("**TREND ANALYSIS**")
+            st.markdown(f"Direction: **{analysis.trend['direction']}**")
+            st.markdown(f"Strength: **{analysis.trend['strength']}**")
+            
+            ma_20 = safe_get_last(market_data['ma_20'], current_price)
+            ma_50 = safe_get_last(market_data['ma_50'], current_price)
+            
+            st.caption(f"MA20: {format_price(ma_20, instrument['symbol'])}")
+            st.caption(f"MA50: {format_price(ma_50, instrument['symbol'])}")
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with col_t2:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.markdown("**VOLUME PROFILE**")
+            st.markdown(f"Current: **{analysis.volume['profile']}**")
+            st.markdown(f"Ratio: **{analysis.volume['ratio']:.1f}x**")
+            
+            vwap = safe_get_last(market_data['vwap'], current_price)
+            vwap_dist = ((current_price - vwap) / vwap * 100) if vwap != 0 else 0
+            
+            st.caption(f"VWAP: {format_price(vwap, instrument['symbol'])}")
+            st.caption(f"Distance: {vwap_dist:.2f}%")
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    with tab2:
+        col_m1, col_m2 = st.columns(2)
+        
+        with col_m1:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.markdown("**RSI MOMENTUM**")
+            rsi = analysis.momentum["rsi"]
+            st.markdown(f"Value: **{rsi:.1f}**")
+            
+            if rsi < 30:
+                st.markdown("**Status: OVERSOLD**")
+            elif rsi > 70:
+                st.markdown("**Status: OVERBOUGHT**")
             else:
-                st.markdown(f'<span class="bloomberg-red">▼ {price_change:+.2f}%</span>', unsafe_allow_html=True)
+                st.markdown("**Status: NEUTRAL**")
+            
+            st.progress(min(rsi/100, 1.0))
+            st.markdown('</div>', unsafe_allow_html=True)
         
-        with col_header2:
-            volume = safe_get_last(primary_data['volume'], 0)
-            st.metric("VOLUME", f"${volume:,.0f}")
-            avg_volume = primary_data['volume'].mean() if len(primary_data) > 0 else 0
-            st.caption(f"Avg: ${avg_volume:,.0f}")
-        
-        with col_header3:
-            atr = safe_get_last(engine.df['ATR'], 0)
-            st.metric("ATR", f"${atr:,.2f}")
-            st.caption(f"{engine.signals.get('volatility_regime', 'UNKNOWN')} VOL")
-        
-        with col_header4:
-            st.metric("SESSION", f"{session_icon} {session}")
-            st.caption(f"Strategy: {strategy}")
-        
-        st.divider()
-        
-        # SIGNAL SECTION - Professional Execution
-        st.markdown("### 🎯 TRADE SIGNAL")
-        
-        signal = engine.signals.get('primary', "HOLD")
-        confidence = engine.signals.get('confidence', 50)
-        setup = engine.signals.get('setup', "NO SETUP")
-        
-        col_signal, col_conf, col_setup = st.columns([2, 1, 2])
-        
-        with col_signal:
-            if signal == "BUY":
-                st.markdown(f'<div style="background: #1B5E20; color: white; padding: 20px; border-radius: 5px; text-align: center; font-size: 2rem; font-weight: 800;">BUY {instrument["symbol"]}</div>', unsafe_allow_html=True)
-            elif signal == "SELL":
-                st.markdown(f'<div style="background: #B71C1C; color: white; padding: 20px; border-radius: 5px; text-align: center; font-size: 2rem; font-weight: 800;">SELL {instrument["symbol"]}</div>', unsafe_allow_html=True)
+        with col_m2:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.markdown("**MACD SIGNAL**")
+            macd = analysis.momentum["macd"]
+            signal_line = analysis.momentum["signal"]
+            
+            st.markdown(f"MACD: **{macd:.4f}**")
+            st.markdown(f"Signal: **{signal_line:.4f}**")
+            st.markdown(f"Cross: **{analysis.momentum['macd_signal']}**")
+            
+            if macd > signal_line:
+                st.success("Bullish momentum")
             else:
-                st.markdown(f'<div style="background: #37474F; color: white; padding: 20px; border-radius: 5px; text-align: center; font-size: 2rem; font-weight: 800;">HOLD / FLAT</div>', unsafe_allow_html=True)
+                st.error("Bearish momentum")
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    with tab3:
+        col_l1, col_l2 = st.columns(2)
         
-        with col_conf:
-            st.metric("CONFIDENCE", f"{confidence}%")
-            st.progress(confidence/100)
+        with col_l1:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.markdown("**RESISTANCE LEVELS**")
             
-            if confidence >= 75:
-                st.success("HIGH CONVICTION")
-            elif confidence >= 60:
-                st.info("MODERATE")
+            levels = analysis.levels
+            st.markdown(f"R1: **{format_price(levels.get('r1', 0), instrument['symbol'])}**")
+            st.markdown(f"Pivot: **{format_price(levels.get('pivot', 0), instrument['symbol'])}**")
+            
+            current = safe_get_last(market_data['close'], 0)
+            resistance = levels.get('resistance', current * 1.02)
+            dist_to_res = ((resistance - current) / current * 100) if current != 0 else 0
+            
+            st.caption(f"Distance to resistance: {dist_to_res:.2f}%")
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with col_l2:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.markdown("**SUPPORT LEVELS**")
+            
+            st.markdown(f"S1: **{format_price(levels.get('s1', 0), instrument['symbol'])}**")
+            st.markdown(f"Support: **{format_price(levels.get('support', 0), instrument['symbol'])}**")
+            
+            current = safe_get_last(market_data['close'], 0)
+            support = levels.get('support', current * 0.98)
+            dist_to_sup = ((current - support) / current * 100) if current != 0 else 0
+            
+            st.caption(f"Distance to support: {dist_to_sup:.2f}%")
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.divider()
+    
+    # ==================================================
+    # TECHNICAL INDICATORS OVERVIEW
+    # ==================================================
+    st.markdown('<div class="section-header">TECHNICAL INDICATORS</div>', unsafe_allow_html=True)
+    
+    col_i1, col_i2, col_i3, col_i4 = st.columns(4)
+    
+    with col_i1:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown("**BOLLINGER BANDS**")
+        bb_position = current_price
+        bb_lower = safe_get_last(market_data['bb_lower'], current_price * 0.98)
+        bb_upper = safe_get_last(market_data['bb_upper'], current_price * 1.02)
+        
+        if bb_upper > bb_lower:
+            position_pct = (current_price - bb_lower) / (bb_upper - bb_lower) * 100
+            st.markdown(f"Position: **{position_pct:.0f}%**")
+            
+            if position_pct < 20:
+                st.caption("Near lower band")
+            elif position_pct > 80:
+                st.caption("Near upper band")
             else:
-                st.warning("LOW CONVICTION")
+                st.caption("Within bands")
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col_i2:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown("**VOLATILITY**")
         
-        with col_setup:
-            st.markdown("**SETUP:**")
-            st.markdown(f'### {setup}')
-            st.caption(f"**STRATEGY:** {strategy}")
+        atr_pct = (atr / current_price * 100) if current_price != 0 else 0
+        st.markdown(f"ATR: **{atr_pct:.2f}%**")
+        
+        vol_20 = safe_get_last(market_data['close'].pct_change().rolling(20).std() * 100, 0)
+        st.markdown(f"20D Vol: **{vol_20:.2f}%**")
+        
+        if vol_20 > 3:
+            st.caption("High volatility")
+        elif vol_20 > 1.5:
+            st.caption("Moderate volatility")
+        else:
+            st.caption("Low volatility")
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col_i3:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown("**PRICE ACTION**")
+        
+        # Recent performance
+        if len(market_data) > 5:
+            recent_high = market_data['high'].tail(5).max()
+            recent_low = market_data['low'].tail(5).min()
             
-            # Risk indicator
-            risk = engine.signals.get('risk', "MEDIUM")
-            if risk == "HIGH":
-                st.error("⚠️ HIGH RISK")
-            elif risk == "MEDIUM":
-                st.warning("⚠️ MEDIUM RISK")
-            else:
-                st.info("✅ LOW RISK")
-        
-        st.divider()
-        
-        # EXECUTION PARAMETERS - Professional Order Ticket
-        if signal != "HOLD":
-            st.markdown("### ⚡ EXECUTION PARAMETERS")
+            st.markdown(f"5-period high: **{format_price(recent_high, instrument['symbol'])}**")
+            st.markdown(f"5-period low: **{format_price(recent_low, instrument['symbol'])}**")
             
-            col_exec1, col_exec2, col_exec3, col_exec4 = st.columns(4)
-            
-            with col_exec1:
-                entry_price = engine.signals.get('entry_price', 0)
-                st.markdown("**ENTRY:**")
-                st.markdown(f'### {format_currency(entry_price, instrument["symbol"])}')
-                st.caption(f"Type: {order_type}")
-            
-            with col_exec2:
-                stop_loss = engine.signals.get('stop_loss', 0)
-                if stop_loss:
-                    st.markdown("**STOP LOSS:**")
-                    st.markdown(f'### {format_currency(stop_loss, instrument["symbol"])}')
-                    stop_pct = abs((stop_loss - current_price) / current_price * 100) if current_price > 0 else 0
-                    st.caption(f"({stop_pct:.1f}%)")
-            
-            with col_exec3:
-                take_profit = engine.signals.get('take_profit', 0)
-                if take_profit:
-                    st.markdown("**TAKE PROFIT:**")
-                    st.markdown(f'### {format_currency(take_profit, instrument["symbol"])}')
-                    tp_pct = abs((take_profit - current_price) / current_price * 100) if current_price > 0 else 0
-                    st.caption(f"({tp_pct:.1f}%)")
-            
-            with col_exec4:
-                position_size_val = engine.signals.get('position_size', 0)
-                st.markdown("**POSITION:**")
-                st.markdown(f'### {position_size_val:,.4f}')
-                notional = engine.signals.get('notional', 0)
-                st.caption(f"Notional: ${notional:,.0f}")
+            range_pct = ((recent_high - recent_low) / recent_low * 100) if recent_low != 0 else 0
+            st.caption(f"Range: {range_pct:.1f}%")
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col_i4:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown("**MARKET REGIME**")
         
-        # Rationale
-        rationale = engine.signals.get('rationale', [])
-        if rationale:
-            st.markdown("**RATIONALE:**")
-            for reason in rationale:
-                st.info(f"• {reason}")
+        # Determine market regime
+        bb_width = (bb_upper - bb_lower) / bb_middle if (bb_upper - bb_lower) > 0 and (bb_middle := safe_get_last(market_data['bb_middle'], current_price)) != 0 else 0.1
         
-        st.divider()
+        if bb_width > 0.1:
+            st.markdown("**Regime: TRENDING**")
+            st.caption("Wide price range")
+        elif bb_width < 0.05:
+            st.markdown("**Regime: COMPRESSION**")
+            st.caption("Narrow price range")
+        else:
+            st.markdown("**Regime: NORMAL**")
+            st.caption("Moderate price action")
         
-        # MARKET ANALYSIS - Professional View
-        st.markdown("### 📊 MARKET ANALYSIS")
-        
-        tab_market, tab_technical, tab_orderflow = st.tabs(["MARKET STRUCTURE", "TECHNICALS", "ORDER FLOW"])
-        
-        with tab_market:
-            col_m1, col_m2 = st.columns(2)
-            
-            with col_m1:
-                st.markdown("#### TREND ANALYSIS")
-                st.metric("PRIMARY TREND", engine.trend.get('primary', "NEUTRAL"))
-                st.metric("TREND STRENGTH", engine.trend.get('strength', "WEAK"))
-                st.metric("MARKET REGIME", engine.condition.get('regime', "UNKNOWN"))
-                
-                # Multi-timeframe alignment
-                st.markdown("#### TIMEFRAME ALIGNMENT")
-                secondary_trend = "UPTREND" if len(secondary_data) > 20 and safe_get_last(secondary_data['close'], 0) > secondary_data['close'].iloc[-20] else "DOWNTREND"
-                
-                for tf, trend in [(primary_tf, engine.trend['primary']), (secondary_tf, secondary_trend)]:
-                    if "UPTREND" in str(trend):
-                        st.success(f"{tf}: {trend}")
-                    elif "DOWNTREND" in str(trend):
-                        st.error(f"{tf}: {trend}")
-                    else:
-                        st.info(f"{tf}: {trend}")
-            
-            with col_m2:
-                st.markdown("#### SUPPORT/RESISTANCE")
-                levels = engine.levels
-                
-                # Create levels table
-                level_data = []
-                current_price = safe_get_last(primary_data['close'], 0)
-                
-                for level_name, level_price in [
-                    ("Resistance", levels.get('high', 0)),
-                    ("Recent High", levels.get('recent_high', 0)),
-                    ("Fib 0.382", levels.get('fib_382', 0)),
-                    ("Fib 0.500", levels.get('fib_500', 0)),
-                    ("Fib 0.618", levels.get('fib_618', 0)),
-                    ("Current", current_price),
-                    ("Fib 0.786", levels.get('fib_786', 0)),
-                    ("Recent Low", levels.get('recent_low', 0)),
-                    ("Support", levels.get('low', 0))
-                ]:
-                    level_data.append({
-                        "Level": level_name,
-                        "Price": format_currency(level_price, instrument['symbol'])
-                    })
-                
-                st.dataframe(pd.DataFrame(level_data), use_container_width=True, hide_index=True)
-        
-        with tab_technical:
-            col_t1, col_t2 = st.columns(2)
-            
-            with col_t1:
-                st.markdown("#### MOMENTUM INDICATORS")
-                
-                # RSI
-                rsi = safe_get_last(engine.df['RSI'], 50)
-                st.metric("RSI (14)", f"{rsi:.1f}")
-                if rsi < 30:
-                    st.success("OVERSOLD")
-                elif rsi > 70:
-                    st.error("OVERBOUGHT")
-                else:
-                    st.info("NEUTRAL")
-                
-                # MACD
-                macd = safe_get_last(engine.df['MACD'], 0)
-                signal_line = safe_get_last(engine.df['MACD_Signal'], 0)
-                st.metric("MACD", f"{macd:.4f}")
-                if macd > signal_line:
-                    st.success("BULLISH")
-                else:
-                    st.error("BEARISH")
-                
-                # Bollinger Bands
-                bb_lower = safe_get_last(engine.df['BB_LOWER'], current_price * 0.98)
-                bb_upper = safe_get_last(engine.df['BB_UPPER'], current_price * 1.02)
-                if bb_upper > bb_lower:
-                    bb_position = (current_price - bb_lower) / (bb_upper - bb_lower)
-                    st.metric("BB POSITION", f"{bb_position:.1%}")
-                    if bb_position < 0.2:
-                        st.success("NEAR LOWER BAND")
-                    elif bb_position > 0.8:
-                        st.error("NEAR UPPER BAND")
-                    else:
-                        st.info("MIDDLE RANGE")
-            
-            with col_t2:
-                st.markdown("#### VOLUME & VOLATILITY")
-                
-                # Volume
-                volume_ratio = safe_get_last(engine.df['volume_ratio'], 1)
-                st.metric("VOLUME RATIO", f"{volume_ratio:.1f}x")
-                if volume_ratio > 1.5:
-                    st.success("HIGH VOLUME")
-                elif volume_ratio < 0.5:
-                    st.warning("LOW VOLUME")
-                
-                # Volatility
-                volatility = safe_get_last(engine.df['volatility_20'], 20)
-                st.metric("VOLATILITY (20D)", f"{volatility:.1f}%")
-                
-                # VWAP
-                vwap_dist = safe_get_last(engine.df['VWAP_DIST'], 0)
-                st.metric("VWAP DISTANCE", f"{vwap_dist:.2f}%")
-                if vwap_dist > 1:
-                    st.error("ABOVE VWAP")
-                elif vwap_dist < -1:
-                    st.success("BELOW VWAP")
-        
-        with tab_orderflow:
-            col_o1, col_o2 = st.columns(2)
-            
-            with col_o1:
-                st.markdown("#### ORDER FLOW ANALYSIS")
-                of = engine.order_flow
-                
-                st.metric("BUYING PRESSURE", f"{of.get('buying_pressure', 0):+.3f}")
-                if of.get('buying_pressure', 0) > 0.1:
-                    st.success("STRONG BUYING")
-                elif of.get('buying_pressure', 0) < -0.1:
-                    st.error("STRONG SELLING")
-                
-                st.metric("VOLUME TREND", of.get('volume_trend', "UNKNOWN"))
-                st.metric("LARGE TRADES", of.get('large_trades', 0))
-                st.caption("Last 20 periods")
-            
-            with col_o2:
-                st.markdown("#### MICROSTRUCTURE")
-                
-                spread_pct = safe_get_last(engine.df['spread_pct'], 0.1)
-                st.metric("AVG SPREAD", f"{spread_pct:.2f}%")
-                
-                atr_pct = (safe_get_last(engine.df['ATR'], 0) / current_price * 100) if current_price > 0 else 0
-                st.metric("ATR %", f"{atr_pct:.2f}%")
-                
-                st.metric("VWAP DEVIATION", f"{of.get('vwap_deviation', 0):.2f}%")
-        
-        # MARKET CONTEXT
-        st.divider()
-        st.markdown("### 🌍 MARKET CONTEXT")
-        
-        col_context1, col_context2, col_context3, col_context4 = st.columns(4)
-        
-        with col_context1:
-            st.metric("ASSET CLASS", instrument['asset_class'])
-            st.caption(f"Venue: {instrument['venue']}")
-        
-        with col_context2:
-            st.metric("LOT SIZE", instrument['lot_size'])
-            st.caption("Minimum increment")
-        
-        with col_context3:
-            st.metric("MAX SLIPPAGE", f"{max_slippage} bps")
-            st.caption("Execution tolerance")
-        
-        with col_context4:
-            st.metric("AGGRESSION", aggression)
-            st.caption("Trade urgency")
-        
-        # FOOTER - Professional
-        st.divider()
-        st.caption(f"""
-        **WALL STREET SIGNAL ENGINE** • Professional Trading Desk • {datetime.now().strftime('%Y-%m-%d %H:%M:%S EST')} • 
-        Instrument: {instrument['symbol']} • Timeframe: {primary_tf}/{secondary_tf} • Strategy: {strategy}
-        """)
-        
-        st.caption("""
-        *Professional trading system for institutional use. Not financial advice. 
-        Trading involves substantial risk of loss. Past performance is not indicative of future results.*
-        """)
-        
-    except Exception as e:
-        st.error("🚨 TRADING DESK ERROR")
-        st.error(f"Error: {str(e)[:200]}")
-        
-        # Show basic information even when error occurs
-        st.info("**Basic Instrument Info:**")
-        st.write(f"Symbol: {instrument['symbol']}")
-        st.write(f"Asset Class: {instrument['asset_class']}")
-        st.write(f"Current Time: {datetime.now().strftime('%H:%M EST')}")
-        
-        if st.button("🔄 RESTART TRADING ENGINE", type="primary"):
-            st.cache_data.clear()
-            st.rerun()
+        st.caption(f"BB Width: {bb_width:.3f}")
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # ==================================================
+    # FOOTER
+    # ==================================================
+    st.divider()
+    
+    col_f1, col_f2, col_f3 = st.columns([2, 1, 1])
+    
+    with col_f1:
+        st.caption(f"Analysis time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        st.caption(f"Data points: {len(market_data)} | Timeframe: {primary_tf}")
+    
+    with col_f2:
+        st.caption(f"Asset class: {instrument['asset_class']}")
+    
+    with col_f3:
+        st.caption("For professional use only")
 
 # ==================================================
 # EXECUTION
@@ -1327,15 +888,10 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-        
-        # Auto-refresh for active trading desk
         tm.sleep(30)
         st.rerun()
-        
     except Exception as e:
-        st.error("🚨 APPLICATION ERROR")
-        st.error(f"Critical error: {str(e)}")
-        
-        if st.button("🔄 RESTART APPLICATION", type="primary"):
+        st.error("System error - please refresh")
+        if st.button("Refresh", type="primary"):
             st.cache_data.clear()
             st.rerun()
