@@ -1547,7 +1547,112 @@ class SentimentEngine:
                  'source': 'Nikkei', 'published': 'Sample'},
             ],
         }
-                                    'exit_date': df.index[i]
+        return samples.get(symbol, [
+            {'title': f'{symbol} trades within tight range amid low volatility',
+             'description': 'Market participants await key economic data for directional cues.',
+             'source': 'Reuters', 'published': 'Sample'}
+        ])
+
+
+# ==================================================
+# BACKTESTER — ACTUAL HISTORICAL SIMULATION
+# ==================================================
+
+class Backtester:
+    """
+    Runs the signal logic on historical OHLCV data.
+    Uses real candle OHLC — no synthetic prices.
+    """
+
+    def __init__(self, df: pd.DataFrame, atr_multiplier: float = 2.0, risk_pct: float = 1.0):
+        self.df = df.copy()
+        self.atr_mult = atr_multiplier
+        self.risk_pct = risk_pct
+
+    def run(self) -> Dict:
+        df = self.df
+        if len(df) < 100:
+            return {'error': 'Insufficient data (need 100+ bars)'}
+
+        ind = Indicators()
+        atr_s = ind.atr(df['high'], df['low'], df['close'])
+        rsi_s = ind.rsi(df['close'])
+        macd_line, signal_line, _ = ind.macd(df['close'])
+        ema9  = ind.ema(df['close'], 9)
+        ema21 = ind.ema(df['close'], 21)
+        ema50 = ind.ema(df['close'], 50)
+
+        trades      = []
+        equity      = 10000.0
+        equity_curve = [equity]
+        in_trade    = False
+        trade_dir   = None
+        entry_price = None
+        stop_price  = None
+        target_price = None
+        entry_idx   = None
+
+        for i in range(50, len(df) - 1):
+            bar      = df.iloc[i]
+            next_bar = df.iloc[i + 1]
+            atr      = atr_s.iloc[i]
+
+            if pd.isna(atr) or atr == 0:
+                continue
+
+            bullish = (ema9.iloc[i] > ema21.iloc[i] > ema50.iloc[i] and
+                       rsi_s.iloc[i] > 45 and rsi_s.iloc[i] < 70 and
+                       macd_line.iloc[i] > signal_line.iloc[i])
+            bearish = (ema9.iloc[i] < ema21.iloc[i] < ema50.iloc[i] and
+                       rsi_s.iloc[i] < 55 and rsi_s.iloc[i] > 30 and
+                       macd_line.iloc[i] < signal_line.iloc[i])
+
+            if not in_trade:
+                if bullish:
+                    in_trade     = True
+                    trade_dir    = 'LONG'
+                    entry_price  = next_bar['open']
+                    stop_price   = entry_price - atr * self.atr_mult
+                    target_price = entry_price + atr * self.atr_mult * 2
+                    entry_idx    = i
+                elif bearish:
+                    in_trade     = True
+                    trade_dir    = 'SHORT'
+                    entry_price  = next_bar['open']
+                    stop_price   = entry_price + atr * self.atr_mult
+                    target_price = entry_price - atr * self.atr_mult * 2
+                    entry_idx    = i
+            else:
+                hit_stop   = False
+                hit_target = False
+                if trade_dir == 'LONG':
+                    hit_stop   = bar['low']  <= stop_price
+                    hit_target = bar['high'] >= target_price
+                else:
+                    hit_stop   = bar['high'] >= stop_price
+                    hit_target = bar['low']  <= target_price
+
+                if hit_target or hit_stop or (i - entry_idx > 20):
+                    exit_price = (target_price if hit_target
+                                  else (stop_price if hit_stop else bar['close']))
+                    pnl_pct = (exit_price - entry_price) / entry_price
+                    if trade_dir == 'SHORT':
+                        pnl_pct = -pnl_pct
+                    stop_dist_pct = abs(entry_price - stop_price) / entry_price
+                    position_size = ((equity * self.risk_pct / 100) / stop_dist_pct
+                                     if stop_dist_pct > 0 else equity)
+                    pnl_dollar = pnl_pct * position_size
+                    equity += pnl_dollar
+                    trades.append({
+                        'direction':  trade_dir,
+                        'entry':      entry_price,
+                        'exit':       exit_price,
+                        'pnl_pct':    pnl_pct * 100,
+                        'pnl_dollar': pnl_dollar,
+                        'won':        pnl_pct > 0,
+                        'reason':     'target' if hit_target else ('stop' if hit_stop else 'timeout'),
+                        'entry_date': df.index[entry_idx],
+                        'exit_date':  df.index[i]
                     })
                     equity_curve.append(equity)
                     in_trade = False
