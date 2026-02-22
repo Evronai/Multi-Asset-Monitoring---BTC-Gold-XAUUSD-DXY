@@ -8,7 +8,11 @@ import json
 from typing import Dict, List, Tuple, Optional
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+try:
+    from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+    VADER_AVAILABLE = True
+except ImportError:
+    VADER_AVAILABLE = False
 
 warnings.filterwarnings('ignore')
 
@@ -924,20 +928,58 @@ class SentimentEngine:
     Falls back to NewsData.io if API key provided.
     """
 
+    # Fallback lexicon for when VADER is not installed
+    POSITIVE = [
+        'bullish', 'surge', 'rally', 'gain', 'rise', 'soar', 'jump', 'record',
+        'high', 'strong', 'growth', 'inflow', 'adoption', 'optimism', 'support',
+        'buy', 'accumulate', 'breakthrough', 'upside', 'recovery', 'positive',
+        'beat', 'exceeded', 'outperform', 'upgrade', 'boom', 'momentum'
+    ]
+    NEGATIVE = [
+        'bearish', 'crash', 'plunge', 'drop', 'fall', 'decline', 'dump', 'sell',
+        'outflow', 'fear', 'risk', 'warn', 'weak', 'low', 'loss', 'concern',
+        'negative', 'miss', 'underperform', 'downgrade', 'bust', 'collapse',
+        'headwind', 'pressure', 'volatility', 'uncertain', 'halt', 'ban'
+    ]
+    NEGATORS = ['not', "n't", 'no', 'never', 'without', 'against']
+
     def __init__(self, api_key: str = ""):
         self.api_key = api_key
-        self.vader = SentimentIntensityAnalyzer()
+        if VADER_AVAILABLE:
+            self.vader = SentimentIntensityAnalyzer()
+        else:
+            self.vader = None
 
     def analyze_text(self, text: str) -> Dict:
-        scores = self.vader.polarity_scores(text)
-        compound = scores['compound']
+        if self.vader is not None:
+            scores = self.vader.polarity_scores(text)
+            compound = scores['compound']
+        else:
+            compound = self._lexicon_score(text)
+
         if compound >= 0.05:
             label = 'positive'
         elif compound <= -0.05:
             label = 'negative'
         else:
             label = 'neutral'
-        return {'label': label, 'compound': compound, 'scores': scores}
+        return {'label': label, 'compound': round(compound, 3)}
+
+    def _lexicon_score(self, text: str) -> float:
+        """Simple but negation-aware lexicon scoring (VADER fallback)"""
+        words = text.lower().split()
+        score = 0
+        for i, word in enumerate(words):
+            # Strip punctuation
+            clean = word.strip('.,!?;:"\'')
+            negated = any(n in words[max(0, i-3):i] for n in self.NEGATORS)
+            if clean in self.POSITIVE:
+                score += -1 if negated else 1
+            elif clean in self.NEGATIVE:
+                score += 1 if negated else -1
+        # Normalize to [-1, 1]
+        total_words = max(len(words), 1)
+        return max(-1.0, min(1.0, score / (total_words ** 0.5)))
 
     def fetch_and_analyze(self, symbol: str) -> List[Dict]:
         articles = []
