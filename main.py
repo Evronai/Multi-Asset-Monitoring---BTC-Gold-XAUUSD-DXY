@@ -61,7 +61,7 @@ with st.sidebar:
                                    help="Free tier: 800 calls/day. Get at twelvedata.com")
         st.markdown("**NewsData.io** (Optional)")
         news_api_key = st.text_input("NewsData Key", type="password", key="news_api_key")
-        st.caption("⚠️ Without API keys, crypto uses Binance (free), forex uses Twelve Data demo data.")
+        st.caption("⚠️ Crypto uses Coinbase → CoinGecko (free, no key). Forex/Gold requires Twelve Data key.")
 
     st.markdown("### 📊 INSTRUMENTS")
     instruments = st.multiselect(
@@ -107,14 +107,21 @@ class DataFetcher:
     - Forex/Gold: Twelve Data API (free tier, key required)
     """
 
-    BINANCE_TF_MAP = {
-        "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
-        "1h": "1h", "4h": "4h", "1day": "1d", "1week": "1w"
+    # Coinbase granularity in seconds
+    COINBASE_TF_MAP = {
+        "1m": 60, "5m": 300, "15m": 900, "30m": 1800,
+        "1h": 3600, "4h": 14400, "1day": 86400, "1week": 604800
     }
 
     TWELVE_TF_MAP = {
         "1m": "1min", "5m": "5min", "15m": "15min", "30m": "30min",
         "1h": "1h", "4h": "4h", "1day": "1day", "1week": "1week"
+    }
+
+    # CoinGecko days per timeframe
+    COINGECKO_DAYS = {
+        "1m": 1, "5m": 3, "15m": 7, "30m": 14,
+        "1h": 30, "4h": 90, "1day": 365, "1week": 365
     }
 
     def __init__(self, twelve_api_key: str = ""):
@@ -125,41 +132,123 @@ class DataFetcher:
         """
         Returns (DataFrame, source_label).
         DataFrame always has: open, high, low, close, volume with DatetimeIndex.
+        Crypto: tries Coinbase → CoinGecko fallback.
+        Forex/Gold: Twelve Data.
         """
         is_crypto = symbol in ["BTC/USDT", "ETH/USDT", "BTC-USD", "ETH-USD"]
 
         if is_crypto:
-            return _self._fetch_binance(symbol, interval, limit)
+            # Try Coinbase first
+            df, src = _self._fetch_coinbase(symbol, interval, limit)
+            if df is not None and len(df) >= 20:
+                return df, src
+            # Fallback to CoinGecko (OHLC endpoint)
+            df, src = _self._fetch_coingecko(symbol, interval, limit)
+            return df, src
         else:
             return _self._fetch_twelve_data(symbol, interval, limit)
 
-    def _fetch_binance(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
-        """Fetch real OHLCV from Binance public API"""
+    def _fetch_coinbase(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
+        """
+        Fetch OHLCV from Coinbase Advanced Trade public API.
+        No API key required. Not geo-blocked like Binance.
+        Max 300 candles per request.
+        """
         try:
-            binance_symbol = symbol.replace("/", "")
-            tf = self.BINANCE_TF_MAP.get(interval, "1h")
+            # Map symbol to Coinbase product ID
+            sym_map = {
+                "BTC/USDT": "BTC-USD", "ETH/USDT": "ETH-USD",
+                "BTC-USD": "BTC-USD", "ETH-USD": "ETH-USD"
+            }
+            product_id = sym_map.get(symbol, symbol)
+            granularity = self.COINBASE_TF_MAP.get(interval, 3600)
 
-            url = "https://api.binance.com/api/v3/klines"
-            params = {"symbol": binance_symbol, "interval": tf, "limit": min(limit, 1000)}
+            # Coinbase allows max 300 candles, paginate if needed
+            end_time = int(datetime.utcnow().timestamp())
+            start_time = end_time - granularity * min(limit, 300)
 
-            resp = requests.get(url, params=params, timeout=15)
+            url = f"https://api.exchange.coinbase.com/products/{product_id}/candles"
+            params = {
+                "granularity": granularity,
+                "start": datetime.utcfromtimestamp(start_time).isoformat(),
+                "end": datetime.utcfromtimestamp(end_time).isoformat()
+            }
+
+            resp = requests.get(url, params=params, timeout=15,
+                                headers={"User-Agent": "Mozilla/5.0"})
             resp.raise_for_status()
             raw = resp.json()
 
-            df = pd.DataFrame(raw, columns=[
-                "timestamp", "open", "high", "low", "close", "volume",
-                "close_time", "quote_vol", "num_trades", "taker_buy_base",
-                "taker_buy_quote", "ignore"
-            ])
-            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+            if not raw or isinstance(raw, dict):
+                return None, f"Coinbase: unexpected response"
+
+            # Coinbase returns [timestamp, low, high, open, close, volume]
+            df = pd.DataFrame(raw, columns=["timestamp", "low", "high", "open", "close", "volume"])
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", utc=True)
             df.set_index("timestamp", inplace=True)
             df = df[["open", "high", "low", "close", "volume"]].astype(float)
-            df = df[df["volume"] > 0]  # remove empty candles
+            df = df.sort_index()
+            df = df[df["volume"] > 0]
 
-            return df, f"Binance ({symbol})"
+            return df, f"Coinbase ({product_id})"
 
         except Exception as e:
-            return None, f"Binance error: {e}"
+            return None, f"Coinbase error: {e}"
+
+    def _fetch_coingecko(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
+        """
+        CoinGecko OHLC endpoint — returns REAL OHLC (not reconstructed).
+        Free, no API key. Fallback when Coinbase fails.
+        Note: CoinGecko OHLC granularity is fixed by the 'days' param:
+          1-2 days → 30min candles, 3-89 days → 4h candles, 90+ days → 4day candles
+        """
+        try:
+            coin_map = {
+                "BTC/USDT": "bitcoin", "ETH/USDT": "ethereum",
+                "BTC-USD": "bitcoin", "ETH-USD": "ethereum"
+            }
+            coin_id = coin_map.get(symbol, "bitcoin")
+            days = self.COINGECKO_DAYS.get(interval, 30)
+
+            url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc"
+            params = {"vs_currency": "usd", "days": days}
+
+            resp = requests.get(url, params=params, timeout=15,
+                                headers={"User-Agent": "Mozilla/5.0"})
+            resp.raise_for_status()
+            raw = resp.json()
+
+            if not raw:
+                return None, "CoinGecko: no data"
+
+            df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close"])
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+            df.set_index("timestamp", inplace=True)
+            df = df.astype(float)
+            df["volume"] = 0.0  # CoinGecko OHLC has no volume; use market_chart for vol if needed
+            df = df.sort_index()
+
+            # Merge in volume from market_chart endpoint
+            try:
+                vol_url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
+                vol_resp = requests.get(vol_url,
+                                        params={"vs_currency": "usd", "days": days},
+                                        timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+                vol_data = vol_resp.json().get("total_volumes", [])
+                vol_df = pd.DataFrame(vol_data, columns=["timestamp", "volume"])
+                vol_df["timestamp"] = pd.to_datetime(vol_df["timestamp"], unit="ms", utc=True)
+                vol_df.set_index("timestamp", inplace=True)
+                # Resample volume to match OHLC frequency
+                freq = df.index.to_series().diff().median()
+                vol_resampled = vol_df["volume"].resample(freq).sum()
+                df["volume"] = vol_resampled.reindex(df.index, method="nearest").fillna(0)
+            except Exception:
+                pass  # volume stays 0, non-fatal
+
+            return df, f"CoinGecko ({coin_id}, {days}d)"
+
+        except Exception as e:
+            return None, f"CoinGecko error: {e}"
 
     def _fetch_twelve_data(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
         """Fetch real OHLCV from Twelve Data"""
