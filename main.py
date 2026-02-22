@@ -693,12 +693,11 @@ class DataFetcher:
 
     def _fetch_gold(self, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
         """
-        Gold price via GoldAPI.io public endpoint (no key, rate-limited but free).
-        Falls back to constructing OHLC from Metals-API spot prices.
-        Uses stooq.com as primary — free, no key, CSV download.
+        Gold price from stooq.com — free, no key, real OHLCV.
+        Stooq CSV columns: Date,Open,High,Low,Close,Volume (daily)
+        or Datetime,Open,High,Low,Close,Volume (intraday)
         """
         try:
-            # stooq.com: free, no key, historical OHLCV for gold ($GOLD)
             tf_map = {
                 "1m": "5", "5m": "5", "15m": "15", "30m": "30",
                 "1h": "60", "4h": "60", "1day": "d", "1week": "w"
@@ -710,12 +709,33 @@ class DataFetcher:
 
             from io import StringIO
             df = pd.read_csv(StringIO(resp.text))
-            df.columns = [c.lower() for c in df.columns]
-            df["date"] = pd.to_datetime(df["date"], utc=True)
-            df.set_index("date", inplace=True)
+
+            # Lowercase all columns
+            df.columns = [c.strip().lower() for c in df.columns]
+
+            # Find the date/datetime column — stooq uses 'date' daily, 'datetime' intraday
+            date_col = None
+            for candidate in ["datetime", "date", "time"]:
+                if candidate in df.columns:
+                    date_col = candidate
+                    break
+            if date_col is None:
+                return None, f"stooq: unexpected columns {list(df.columns)}"
+
+            df[date_col] = pd.to_datetime(df[date_col], utc=True)
+            df.set_index(date_col, inplace=True)
+            df.index.name = "timestamp"
+
+            # Select OHLCV — volume may be missing for gold
+            for col in ["open", "high", "low", "close"]:
+                if col not in df.columns:
+                    return None, f"stooq: missing column '{col}'"
+            if "volume" not in df.columns:
+                df["volume"] = 0.0
+
             df = df[["open", "high", "low", "close", "volume"]].astype(float)
             df["volume"] = df["volume"].fillna(0.0)
-            df = df.sort_index().tail(limit)
+            df = df[df["close"] > 0].sort_index().tail(limit)
 
             if len(df) < 5:
                 return None, "stooq: insufficient gold data"
@@ -723,7 +743,7 @@ class DataFetcher:
             return df, "Stooq (XAU/USD)"
 
         except Exception as e:
-            return None, f"Gold fetch error: {e}"
+            return None, f"Stooq gold error: {e}"
 
 
 
