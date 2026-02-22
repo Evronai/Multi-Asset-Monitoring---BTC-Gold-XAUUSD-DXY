@@ -574,7 +574,8 @@ class DataFetcher:
             df = df[["open", "high", "low", "close", "volume"]].astype(float)
             df = df[df["volume"] > 0].sort_index()
 
-            return df, f"Kraken ({pair})"
+            pair_display = pair.replace("XBTUSD", "BTC/USD").replace("ETHUSD", "ETH/USD")
+            return df, f"Kraken ({pair_display})"
 
         except Exception as e:
             return None, f"Kraken error: {e}"
