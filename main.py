@@ -759,6 +759,86 @@ class DataFetcher:
         return result
 
 
+
+# ==================================================
+# TECHNICAL INDICATORS — VECTORIZED
+# ==================================================
+
+class Indicators:
+    """Stateless indicator calculations — all vectorized"""
+
+    @staticmethod
+    def ema(series: pd.Series, period: int) -> pd.Series:
+        return series.ewm(span=period, adjust=False).mean()
+
+    @staticmethod
+    def rsi(close: pd.Series, period: int = 14) -> pd.Series:
+        delta = close.diff()
+        gain = delta.clip(lower=0).rolling(period).mean()
+        loss = (-delta.clip(upper=0)).rolling(period).mean()
+        rs = gain / loss.replace(0, np.nan)
+        return 100 - (100 / (1 + rs))
+
+    @staticmethod
+    def atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+        tr = pd.concat([
+            high - low,
+            (high - close.shift()).abs(),
+            (low - close.shift()).abs()
+        ], axis=1).max(axis=1)
+        return tr.rolling(period).mean()
+
+    @staticmethod
+    def macd(close: pd.Series, fast=12, slow=26, signal=9):
+        exp_fast = close.ewm(span=fast, adjust=False).mean()
+        exp_slow = close.ewm(span=slow, adjust=False).mean()
+        macd_line = exp_fast - exp_slow
+        signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+        histogram = macd_line - signal_line
+        return macd_line, signal_line, histogram
+
+    @staticmethod
+    def bollinger(close: pd.Series, period: int = 20, std_dev: float = 2.0):
+        mid = close.rolling(period).mean()
+        std = close.rolling(period).std()
+        return mid + std_dev * std, mid, mid - std_dev * std
+
+    @staticmethod
+    def volume_sma(volume: pd.Series, period: int = 20) -> pd.Series:
+        return volume.rolling(period).mean()
+
+    @staticmethod
+    def adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14):
+        """Average Directional Index"""
+        atr_val = Indicators.atr(high, low, close, period)
+        up_move = high.diff()
+        down_move = -low.diff()
+        plus_dm  = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
+        minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
+        plus_di  = 100 * pd.Series(plus_dm,  index=close.index).rolling(period).mean() / atr_val
+        minus_di = 100 * pd.Series(minus_dm, index=close.index).rolling(period).mean() / atr_val
+        dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+        return dx.rolling(period).mean(), plus_di, minus_di
+
+    @staticmethod
+    def find_swing_highs(high: pd.Series, lookback: int = 3) -> pd.Series:
+        result = pd.Series(False, index=high.index)
+        for i in range(lookback, len(high) - lookback):
+            window = high.iloc[i-lookback:i+lookback+1]
+            if high.iloc[i] == window.max():
+                result.iloc[i] = True
+        return result
+
+    @staticmethod
+    def find_swing_lows(low: pd.Series, lookback: int = 3) -> pd.Series:
+        result = pd.Series(False, index=low.index)
+        for i in range(lookback, len(low) - lookback):
+            window = low.iloc[i-lookback:i+lookback+1]
+            if low.iloc[i] == window.min():
+                result.iloc[i] = True
+        return result
+
+
 # ==================================================
 # SMART MONEY CONCEPTS ENGINE — PROPER IMPLEMENTATION
 # ==================================================
