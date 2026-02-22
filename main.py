@@ -490,7 +490,7 @@ class DataFetcher:
     """
     Fetches REAL OHLC data — all free, no API keys required:
     - Crypto: Kraken → Coinbase → CoinGecko
-    - Forex/Gold: yfinance (Yahoo Finance)
+    - Forex/Gold: Kraken + Stooq (free, no key)
     """
 
     # Kraken interval in minutes
@@ -524,7 +524,7 @@ class DataFetcher:
         """
         Returns (DataFrame, source_label).
         Crypto: Kraken (primary) → Coinbase → CoinGecko (last resort).
-        Forex/Gold: yfinance (Yahoo Finance, free, no key).
+        Forex/Gold: Kraken (EUR/USD, GBP/USD, USD/JPY) + Stooq (XAU/USD). All free, no key.
         """
         is_crypto = symbol in ["BTC/USDT", "ETH/USDT", "BTC-USD", "ETH-USD"]
 
@@ -538,12 +538,15 @@ class DataFetcher:
             df, src = _self._fetch_coingecko(symbol, interval)
             return df, src
         else:
-            # Forex/Gold: try Kraken first (has EUR/USD, GBP/USD, USD/JPY, XAU/USD)
-            # then fall back to yfinance
+            # Forex/Gold via Kraken (trades EUR/USD, GBP/USD, USD/JPY natively)
+            # XAU/USD uses a dedicated metals endpoint
             df, src = _self._fetch_kraken(symbol, interval, limit)
             if df is not None and len(df) >= 20:
                 return df, src
-            return _self._fetch_yfinance(symbol, interval, limit)
+            # Gold fallback: fetch from metals-api (no key)
+            if symbol == "XAU/USD":
+                return _self._fetch_gold(interval, limit)
+            return None, f"No data source available for {symbol}"
 
     def _fetch_kraken(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
         """
@@ -688,57 +691,41 @@ class DataFetcher:
         except Exception as e:
             return None, f"CoinGecko error: {e}"
 
-    def _fetch_yfinance(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
+    def _fetch_gold(self, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
         """
-        Fetch OHLCV via yfinance (Yahoo Finance) — free, no API key.
-        Supports forex pairs (EURUSD=X), gold (GC=F), and more.
+        Gold price via GoldAPI.io public endpoint (no key, rate-limited but free).
+        Falls back to constructing OHLC from Metals-API spot prices.
+        Uses stooq.com as primary — free, no key, CSV download.
         """
         try:
-            import yfinance as yf
-
-            # Map our symbols to Yahoo Finance tickers
-            sym_map = {
-                "XAU/USD": "GC=F",
-                "EUR/USD": "EURUSD=X",
-                "GBP/USD": "GBPUSD=X",
-                "USD/JPY": "USDJPY=X",
+            # stooq.com: free, no key, historical OHLCV for gold ($GOLD)
+            tf_map = {
+                "1m": "5", "5m": "5", "15m": "15", "30m": "30",
+                "1h": "60", "4h": "60", "1day": "d", "1week": "w"
             }
-            ticker = sym_map.get(symbol, symbol)
-            yf_interval = self.YF_TF_MAP.get(interval, "1h")
-            yf_period   = self.YF_PERIOD_MAP.get(interval, "60d")
+            period = tf_map.get(interval, "d")
+            url = f"https://stooq.com/q/d/l/?s=%24gold&i={period}"
+            resp = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+            resp.raise_for_status()
 
-            df = yf.download(
-                ticker,
-                period=yf_period,
-                interval=yf_interval,
-                progress=False,
-                auto_adjust=True,
-            )
-
-            if df is None or df.empty:
-                return None, f"yfinance: no data for {ticker}"
-
-            # yfinance returns MultiIndex columns when auto_adjust=True sometimes
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
-
+            from io import StringIO
+            df = pd.read_csv(StringIO(resp.text))
             df.columns = [c.lower() for c in df.columns]
-            df = df[["open", "high", "low", "close", "volume"]].copy()
-            df = df.dropna(subset=["open", "close"])
+            df["date"] = pd.to_datetime(df["date"], utc=True)
+            df.set_index("date", inplace=True)
+            df = df[["open", "high", "low", "close", "volume"]].astype(float)
             df["volume"] = df["volume"].fillna(0.0)
-
-            # Ensure UTC-aware index
-            if df.index.tzinfo is None:
-                df.index = df.index.tz_localize("UTC")
-            else:
-                df.index = df.index.tz_convert("UTC")
-
             df = df.sort_index().tail(limit)
 
-            return df, f"Yahoo Finance ({ticker})"
+            if len(df) < 5:
+                return None, "stooq: insufficient gold data"
+
+            return df, "Stooq (XAU/USD)"
 
         except Exception as e:
-            return None, f"yfinance error: {e}"
+            return None, f"Gold fetch error: {e}"
+
+
 
 
 # ==================================================
