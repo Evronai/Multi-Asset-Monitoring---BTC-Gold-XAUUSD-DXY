@@ -530,10 +530,27 @@ class MultiTimeframeAnalyzer:
     
     def _analyze_timeframe(self, timeframe: str) -> Dict:
         """Analyze single timeframe"""
-        df = self.data[timeframe]
+        df = self.data[timeframe].copy()  # Make a copy to avoid modifying original
         
-        # Calculate all indicators
+        # Calculate all indicators and add to DataFrame
         indicators = self._calculate_indicators(df, timeframe)
+        
+        # Ensure RSI and ATR are in the DataFrame for pattern detection
+        if 'rsi' not in df.columns:
+            # Calculate RSI
+            delta = df['close'].diff()
+            gain = delta.where(delta > 0, 0).rolling(14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            rs = gain / loss
+            df['rsi'] = 100 - (100 / (1 + rs))
+        
+        if 'atr' not in df.columns:
+            # Calculate ATR
+            hl = df['high'] - df['low']
+            hc = abs(df['high'] - df['close'].shift())
+            lc = abs(df['low'] - df['close'].shift())
+            true_range = pd.concat([hl, hc, lc], axis=1).max(axis=1)
+            df['atr'] = true_range.rolling(14).mean()
         
         # Analyze price structure
         price_structure = self._analyze_price_structure(df)
@@ -733,12 +750,33 @@ class MultiTimeframeAnalyzer:
         """Detect smart money patterns and divergences"""
         patterns = []
         
+        # Calculate ATR for this timeframe if not already in df
+        if 'atr' not in df.columns:
+            # Calculate ATR manually
+            hl = df['high'] - df['low']
+            hc = abs(df['high'] - df['close'].shift())
+            lc = abs(df['low'] - df['close'].shift())
+            true_range = pd.concat([hl, hc, lc], axis=1).max(axis=1)
+            atr_series = true_range.rolling(14).mean()
+        else:
+            atr_series = df['atr']
+        
         # RSI Divergence
         if len(df) > 25:
+            # Calculate RSI if not in df
+            if 'rsi' not in df.columns:
+                delta = df['close'].diff()
+                gain = delta.where(delta > 0, 0).rolling(14).mean()
+                loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+                rs = gain / loss
+                rsi_series = 100 - (100 / (1 + rs))
+            else:
+                rsi_series = df['rsi']
+            
             # Look for hidden divergence
             recent_highs = df['high'].tail(25)
             recent_lows = df['low'].tail(25)
-            recent_rsi = df['rsi'].tail(25) if 'rsi' in df.columns else pd.Series([50] * 25)
+            recent_rsi = rsi_series.tail(25)
             
             if len(recent_highs) >= 10 and len(recent_rsi) >= 10:
                 # Bearish divergence (price makes higher high, RSI makes lower high)
@@ -758,10 +796,13 @@ class MultiTimeframeAnalyzer:
                 candle = df.iloc[i]
                 prev_candle = df.iloc[i-1]
                 
+                # Get ATR value for this candle
+                current_atr = atr_series.iloc[i] if not pd.isna(atr_series.iloc[i]) else df['close'].iloc[i] * 0.01
+                
                 # Bullish order block (strong down candle followed by up candle)
                 if (prev_candle['close'] < prev_candle['open'] and 
                     candle['close'] > candle['open'] and
-                    abs(prev_candle['close'] - prev_candle['open']) > df['atr'].iloc[i] * 0.5):
+                    abs(prev_candle['close'] - prev_candle['open']) > current_atr * 0.5):
                     if i == len(df) - 2:  # Recent pattern
                         patterns.append("BULLISH_ORDER_BLOCK")
                         break
@@ -769,7 +810,7 @@ class MultiTimeframeAnalyzer:
                 # Bearish order block (strong up candle followed by down candle)
                 if (prev_candle['close'] > prev_candle['open'] and 
                     candle['close'] < candle['open'] and
-                    abs(prev_candle['close'] - prev_candle['open']) > df['atr'].iloc[i] * 0.5):
+                    abs(prev_candle['close'] - prev_candle['open']) > current_atr * 0.5):
                     if i == len(df) - 2:  # Recent pattern
                         patterns.append("BEARISH_ORDER_BLOCK")
                         break
