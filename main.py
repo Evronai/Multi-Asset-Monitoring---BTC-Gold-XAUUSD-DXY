@@ -447,13 +447,13 @@ with st.sidebar:
     with st.expander("API KEYS", expanded=False):
         st.markdown("**NEWSDATA.IO** · Optional — enhances news tab")
         news_api_key = st.text_input("NewsData Key", type="password", key="news_api_key")
-        st.caption("All market data is free — no keys required. Crypto: Kraken→Coinbase→CoinGecko. Forex/Gold: Yahoo Finance.")
+        st.caption("All market data is free — no keys required. Crypto: Kraken→Coinbase→CoinGecko. Forex: Kraken (EUR/USD, GBP/USD, USD/JPY).")
 
     st.markdown("### ── INSTRUMENTS ──")
     instruments = st.multiselect(
         "Markets",
-        ["BTC/USDT", "ETH/USDT", "XAU/USD", "EUR/USD", "GBP/USD", "USD/JPY"],
-        default=["BTC/USDT", "XAU/USD"],
+        ["BTC/USDT", "ETH/USDT", "EUR/USD", "GBP/USD", "USD/JPY"],
+        default=["BTC/USDT", "ETH/USDT"],
         key="instruments"
     )
 
@@ -490,7 +490,7 @@ class DataFetcher:
     """
     Fetches REAL OHLC data — all free, no API keys required:
     - Crypto: Kraken → Coinbase → CoinGecko
-    - Forex/Gold: Kraken + Stooq (free, no key)
+    - Forex: Kraken (EUR/USD, GBP/USD, USD/JPY) — free, no key
     """
 
     # Kraken interval in minutes
@@ -505,7 +505,7 @@ class DataFetcher:
         "1h": 3600, "4h": 14400, "1day": 86400, "1week": 604800
     }
 
-    # yfinance interval map for forex/gold
+    # yfinance interval map for forex
     YF_TF_MAP = {
         "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
         "1h": "1h", "4h": "1h", "1day": "1d", "1week": "1wk"
@@ -524,7 +524,7 @@ class DataFetcher:
         """
         Returns (DataFrame, source_label).
         Crypto: Kraken (primary) → Coinbase → CoinGecko (last resort).
-        Forex/Gold: Kraken (EUR/USD, GBP/USD, USD/JPY) + Stooq (XAU/USD). All free, no key.
+        Forex: Kraken (EUR/USD, GBP/USD, USD/JPY). All free, no key.
         """
         is_crypto = symbol in ["BTC/USDT", "ETH/USDT", "BTC-USD", "ETH-USD"]
 
@@ -538,14 +538,10 @@ class DataFetcher:
             df, src = _self._fetch_coingecko(symbol, interval)
             return df, src
         else:
-            # Forex/Gold via Kraken (trades EUR/USD, GBP/USD, USD/JPY natively)
-            # XAU/USD uses a dedicated metals endpoint
+            # Forex via Kraken (EUR/USD, GBP/USD, USD/JPY)
             df, src = _self._fetch_kraken(symbol, interval, limit)
             if df is not None and len(df) >= 20:
                 return df, src
-            # Gold fallback: fetch from metals-api (no key)
-            if symbol == "XAU/USD":
-                return _self._fetch_gold(interval, limit)
             return None, f"No data source available for {symbol}"
 
     def _fetch_kraken(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
@@ -560,8 +556,6 @@ class DataFetcher:
                 "BTC-USD":  "XBTUSD", "ETH-USD":  "ETHUSD",
                 # Forex — Kraken trades these pairs natively
                 "EUR/USD": "EURUSD", "GBP/USD": "GBPUSD", "USD/JPY": "USDJPY",
-                # Gold — Kraken lists XAU/USD
-                "XAU/USD": "XAUUSD",
             }
             pair = pair_map.get(symbol)
             if pair is None:
@@ -600,7 +594,7 @@ class DataFetcher:
             display_map = {
                 "XBTUSD": "BTC/USD", "ETHUSD": "ETH/USD",
                 "EURUSD": "EUR/USD", "GBPUSD": "GBP/USD",
-                "USDJPY": "USD/JPY", "XAUUSD": "XAU/USD",
+                "USDJPY": "USD/JPY",
             }
             pair_display = display_map.get(pair, pair)
             return df, f"Kraken ({pair_display})"
@@ -691,71 +685,7 @@ class DataFetcher:
         except Exception as e:
             return None, f"CoinGecko error: {e}"
 
-    def _fetch_gold(self, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
-        """
-        Gold price from stooq.com — free, no key, real OHLCV.
-        Stooq CSV columns: Date,Open,High,Low,Close,Volume (daily)
-        or Datetime,Open,High,Low,Close,Volume (intraday)
-        """
-        try:
-            tf_map = {
-                "1m": "5", "5m": "5", "15m": "15", "30m": "30",
-                "1h": "60", "4h": "60", "1day": "d", "1week": "w"
-            }
-            period = tf_map.get(interval, "d")
-            url = f"https://stooq.com/q/d/l/?s=%24gold&i={period}"
-            resp = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
-            resp.raise_for_status()
 
-            from io import StringIO
-            df = pd.read_csv(StringIO(resp.text))
-
-            # Lowercase all columns
-            df.columns = [c.strip().lower() for c in df.columns]
-
-            # Find the date/datetime column — stooq uses 'date' daily, 'datetime' intraday
-            date_col = None
-            for candidate in ["datetime", "date", "time"]:
-                if candidate in df.columns:
-                    date_col = candidate
-                    break
-            if date_col is None:
-                return None, f"stooq: unexpected columns {list(df.columns)}"
-
-            df[date_col] = pd.to_datetime(df[date_col], utc=True)
-            df.set_index(date_col, inplace=True)
-            df.index.name = "timestamp"
-
-            # Select OHLCV — volume may be missing for gold
-            for col in ["open", "high", "low", "close"]:
-                if col not in df.columns:
-                    return None, f"stooq: missing column '{col}'"
-            if "volume" not in df.columns:
-                df["volume"] = 0.0
-
-            df = df[["open", "high", "low", "close", "volume"]].astype(float)
-            df["volume"] = df["volume"].fillna(0.0)
-            df = df[df["close"] > 0].sort_index().tail(limit)
-
-            if len(df) < 5:
-                return None, "stooq: insufficient gold data"
-
-            return df, "Stooq (XAU/USD)"
-
-        except Exception as e:
-            return None, f"Stooq gold error: {e}"
-
-
-
-
-# ==================================================
-# TECHNICAL INDICATORS — VECTORIZED, NO LOOPS
-# ==================================================
-
-class Indicators:
-    """Stateless indicator calculations — all vectorized"""
-
-    @staticmethod
     def ema(series: pd.Series, period: int) -> pd.Series:
         return series.ewm(span=period, adjust=False).mean()
 
@@ -1553,8 +1483,7 @@ class SentimentEngine:
         query_map = {
             "BTC/USDT": "Bitcoin BTC crypto",
             "ETH/USDT": "Ethereum ETH crypto",
-            "XAU/USD": "Gold XAU precious metals",
-            "EUR/USD": "Euro EUR USD forex",
+                        "EUR/USD": "Euro EUR USD forex",
             "GBP/USD": "Pound GBP sterling forex",
             "USD/JPY": "Yen JPY USD forex"
         }
@@ -1591,126 +1520,34 @@ class SentimentEngine:
                  'description': 'Long-term holder supply reaches all-time high, suggesting strong conviction.',
                  'source': 'Glassnode', 'published': 'Sample'},
             ],
-            "XAU/USD": [
-                {'title': 'Gold prices steady near highs as geopolitical tensions persist',
-                 'description': 'Safe-haven demand underpins gold amid ongoing global uncertainty.',
-                 'source': 'Bloomberg', 'published': 'Sample'},
-                {'title': 'Dollar strength weighs on gold outlook despite recession fears',
-                 'description': 'The greenback rally is limiting gold upside in the near term.',
+            "ETH/USDT": [
+                {'title': 'Ethereum staking yields attract institutional capital',
+                 'description': 'Post-merge ETH staking now offers competitive yields vs traditional bonds.',
+                 'source': 'Decrypt', 'published': 'Sample'},
+                {'title': 'Layer-2 activity surges as Ethereum gas fees remain elevated',
+                 'description': 'Arbitrum and Optimism see record transaction volumes this month.',
+                 'source': 'The Block', 'published': 'Sample'},
+            ],
+            "EUR/USD": [
+                {'title': 'ECB holds rates steady amid slowing eurozone growth',
+                 'description': 'Policymakers signal caution as inflation edges toward target.',
                  'source': 'FT', 'published': 'Sample'},
-            ]
+                {'title': 'Dollar strengthens on robust US jobs data',
+                 'description': 'EUR/USD under pressure as Fed rate cut expectations get pushed back.',
+                 'source': 'Reuters', 'published': 'Sample'},
+            ],
+            "GBP/USD": [
+                {'title': 'Bank of England signals gradual easing cycle ahead',
+                 'description': 'Sterling retreats as BoE hints at rate cuts later this year.',
+                 'source': 'Bloomberg', 'published': 'Sample'},
+            ],
+            "USD/JPY": [
+                {'title': 'BoJ surprises with rate hike, yen surges',
+                 'description': 'Bank of Japan raises rates for first time in decades, triggering sharp yen rally.',
+                 'source': 'Nikkei', 'published': 'Sample'},
+            ],
         }
-        return samples.get(symbol, [
-            {'title': f'{symbol} trades within tight range amid low volatility',
-             'description': 'Market participants await key economic data for directional cues.',
-             'source': 'Reuters', 'published': 'Sample'}
-        ])
-
-
-# ==================================================
-# BACKTESTER — ACTUAL HISTORICAL SIMULATION
-# ==================================================
-
-class Backtester:
-    """
-    Runs the signal logic on historical OHLCV data.
-    Uses real candle OHLC — no synthetic prices.
-    Measures: win rate, profit factor, max drawdown, Sharpe ratio.
-    """
-
-    def __init__(self, df: pd.DataFrame, atr_multiplier: float = 2.0, risk_pct: float = 1.0):
-        self.df = df.copy()
-        self.atr_mult = atr_multiplier
-        self.risk_pct = risk_pct
-
-    def run(self) -> Dict:
-        df = self.df
-        if len(df) < 100:
-            return {'error': 'Insufficient data (need 100+ bars)'}
-
-        ind = Indicators()
-        atr_s = ind.atr(df['high'], df['low'], df['close'])
-        rsi_s = ind.rsi(df['close'])
-        macd_line, signal_line, _ = ind.macd(df['close'])
-        ema9 = ind.ema(df['close'], 9)
-        ema21 = ind.ema(df['close'], 21)
-        ema50 = ind.ema(df['close'], 50)
-
-        trades = []
-        equity = 10000.0
-        equity_curve = [equity]
-        in_trade = False
-        trade_dir = None
-        entry_price = None
-        stop_price = None
-        target_price = None
-        entry_idx = None
-
-        for i in range(50, len(df) - 1):
-            bar = df.iloc[i]
-            next_bar = df.iloc[i + 1]
-            atr = atr_s.iloc[i]
-
-            if pd.isna(atr) or atr == 0:
-                continue
-
-            # Generate simple signal from indicators
-            bullish = (ema9.iloc[i] > ema21.iloc[i] > ema50.iloc[i] and
-                       rsi_s.iloc[i] > 45 and rsi_s.iloc[i] < 70 and
-                       macd_line.iloc[i] > signal_line.iloc[i])
-            bearish = (ema9.iloc[i] < ema21.iloc[i] < ema50.iloc[i] and
-                       rsi_s.iloc[i] < 55 and rsi_s.iloc[i] > 30 and
-                       macd_line.iloc[i] < signal_line.iloc[i])
-
-            if not in_trade:
-                if bullish:
-                    in_trade = True
-                    trade_dir = 'LONG'
-                    entry_price = next_bar['open']  # enter at next open (realistic)
-                    stop_price = entry_price - atr * self.atr_mult
-                    target_price = entry_price + atr * self.atr_mult * 2  # 2:1 RR
-                    entry_idx = i
-                elif bearish:
-                    in_trade = True
-                    trade_dir = 'SHORT'
-                    entry_price = next_bar['open']
-                    stop_price = entry_price + atr * self.atr_mult
-                    target_price = entry_price - atr * self.atr_mult * 2
-                    entry_idx = i
-            else:
-                # Check if stop or target hit on this candle
-                hit_stop = False
-                hit_target = False
-
-                if trade_dir == 'LONG':
-                    hit_stop = bar['low'] <= stop_price
-                    hit_target = bar['high'] >= target_price
-                else:
-                    hit_stop = bar['high'] >= stop_price
-                    hit_target = bar['low'] <= target_price
-
-                if hit_target or hit_stop or (i - entry_idx > 20):  # 20 bar timeout
-                    exit_price = target_price if hit_target else (stop_price if hit_stop else bar['close'])
-                    pnl_pct = (exit_price - entry_price) / entry_price
-                    if trade_dir == 'SHORT':
-                        pnl_pct = -pnl_pct
-
-                    # Position sizing: risk_pct of equity / stop distance in pct
-                    stop_dist_pct = abs(entry_price - stop_price) / entry_price
-                    position_size = (equity * self.risk_pct / 100) / stop_dist_pct if stop_dist_pct > 0 else equity
-                    pnl_dollar = pnl_pct * position_size
-                    equity += pnl_dollar
-
-                    trades.append({
-                        'direction': trade_dir,
-                        'entry': entry_price,
-                        'exit': exit_price,
-                        'pnl_pct': pnl_pct * 100,
-                        'pnl_dollar': pnl_dollar,
-                        'won': pnl_pct > 0,
-                        'reason': 'target' if hit_target else ('stop' if hit_stop else 'timeout'),
-                        'entry_date': df.index[entry_idx],
-                        'exit_date': df.index[i]
+                                    'exit_date': df.index[i]
                     })
                     equity_curve.append(equity)
                     in_trade = False
@@ -1903,7 +1740,7 @@ def build_chart(df: pd.DataFrame, symbol: str, tf: str, result: Dict) -> go.Figu
 
 def main():
     news_key = st.session_state.get("news_api_key", "")
-    instruments = st.session_state.get("instruments", ["BTC/USDT", "XAU/USD"])
+    instruments = st.session_state.get("instruments", ["BTC/USDT", "ETH/USDT"])
     timeframes = st.session_state.get("timeframes", ["15m", "1h", "4h", "1day"])
     min_confidence = st.session_state.get("min_confidence", 60)
     require_htf = st.session_state.get("require_htf", True)
