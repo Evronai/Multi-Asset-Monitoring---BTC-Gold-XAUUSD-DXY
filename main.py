@@ -439,13 +439,10 @@ st.markdown(f"""
 with st.sidebar:
     st.markdown("### ── CONFIG ──")
 
-    with st.expander("API KEYS", expanded=True):
-        st.markdown("**TWELVE DATA** · Forex / Gold")
-        twelve_key = st.text_input("Key", type="password", key="twelve_key",
-                                   help="Free tier: 800 calls/day — twelvedata.com")
-        st.markdown("**NEWSDATA.IO** · Optional")
-        news_api_key = st.text_input("Key", type="password", key="news_api_key")
-        st.caption("Crypto: Kraken → Coinbase → CoinGecko (free). Forex/Gold: Twelve Data required.")
+    with st.expander("API KEYS", expanded=False):
+        st.markdown("**NEWSDATA.IO** · Optional — enhances news tab")
+        news_api_key = st.text_input("NewsData Key", type="password", key="news_api_key")
+        st.caption("All market data is free — no keys required. Crypto: Kraken→Coinbase→CoinGecko. Forex/Gold: Yahoo Finance.")
 
     st.markdown("### ── INSTRUMENTS ──")
     instruments = st.multiselect(
@@ -486,9 +483,9 @@ with st.sidebar:
 
 class DataFetcher:
     """
-    Fetches REAL OHLC data:
-    - BTC/ETH: Binance public API (no key required, full OHLCV)
-    - Forex/Gold: Twelve Data API (free tier, key required)
+    Fetches REAL OHLC data — all free, no API keys required:
+    - Crypto: Kraken → Coinbase → CoinGecko
+    - Forex/Gold: yfinance (Yahoo Finance)
     """
 
     # Kraken interval in minutes
@@ -503,20 +500,26 @@ class DataFetcher:
         "1h": 3600, "4h": 14400, "1day": 86400, "1week": 604800
     }
 
-    TWELVE_TF_MAP = {
-        "1m": "1min", "5m": "5min", "15m": "15min", "30m": "30min",
-        "1h": "1h", "4h": "4h", "1day": "1day", "1week": "1week"
+    # yfinance interval map for forex/gold
+    YF_TF_MAP = {
+        "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
+        "1h": "1h", "4h": "1h", "1day": "1d", "1week": "1wk"
+    }
+    # yfinance period map (how far back to fetch)
+    YF_PERIOD_MAP = {
+        "1m": "7d", "5m": "60d", "15m": "60d", "30m": "60d",
+        "1h": "730d", "4h": "730d", "1day": "max", "1week": "max"
     }
 
-    def __init__(self, twelve_api_key: str = ""):
-        self.twelve_key = twelve_api_key
+    def __init__(self):
+        pass
 
     @st.cache_data(ttl=300, show_spinner=False)
     def fetch(_self, symbol: str, interval: str, limit: int = 500) -> Tuple[Optional[pd.DataFrame], str]:
         """
         Returns (DataFrame, source_label).
         Crypto: Kraken (primary) → Coinbase → CoinGecko (last resort).
-        Forex/Gold: Twelve Data.
+        Forex/Gold: yfinance (Yahoo Finance, free, no key).
         """
         is_crypto = symbol in ["BTC/USDT", "ETH/USDT", "BTC-USD", "ETH-USD"]
 
@@ -530,7 +533,7 @@ class DataFetcher:
             df, src = _self._fetch_coingecko(symbol, interval)
             return df, src
         else:
-            return _self._fetch_twelve_data(symbol, interval, limit)
+            return _self._fetch_yfinance(symbol, interval, limit)
 
     def _fetch_kraken(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
         """
@@ -663,45 +666,57 @@ class DataFetcher:
         except Exception as e:
             return None, f"CoinGecko error: {e}"
 
-    def _fetch_twelve_data(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
-        """Fetch real OHLCV from Twelve Data"""
-        if not self.twelve_key:
-            return None, "No Twelve Data API key provided"
-
+    def _fetch_yfinance(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
+        """
+        Fetch OHLCV via yfinance (Yahoo Finance) — free, no API key.
+        Supports forex pairs (EURUSD=X), gold (GC=F), and more.
+        """
         try:
-            tf = self.TWELVE_TF_MAP.get(interval, "1h")
-            url = "https://api.twelvedata.com/time_series"
-            params = {
-                "symbol": symbol,
-                "interval": tf,
-                "outputsize": min(limit, 5000),
-                "apikey": self.twelve_key,
-                "format": "JSON"
+            import yfinance as yf
+
+            # Map our symbols to Yahoo Finance tickers
+            sym_map = {
+                "XAU/USD": "GC=F",
+                "EUR/USD": "EURUSD=X",
+                "GBP/USD": "GBPUSD=X",
+                "USD/JPY": "USDJPY=X",
             }
+            ticker = sym_map.get(symbol, symbol)
+            yf_interval = self.YF_TF_MAP.get(interval, "1h")
+            yf_period   = self.YF_PERIOD_MAP.get(interval, "60d")
 
-            resp = requests.get(url, params=params, timeout=15)
-            data = resp.json()
+            df = yf.download(
+                ticker,
+                period=yf_period,
+                interval=yf_interval,
+                progress=False,
+                auto_adjust=True,
+            )
 
-            if data.get("status") == "error":
-                return None, f"Twelve Data: {data.get('message', 'unknown error')}"
+            if df is None or df.empty:
+                return None, f"yfinance: no data for {ticker}"
 
-            values = data.get("values", [])
-            if not values:
-                return None, "Twelve Data: no data returned"
+            # yfinance returns MultiIndex columns when auto_adjust=True sometimes
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
 
-            df = pd.DataFrame(values)
-            df["datetime"] = pd.to_datetime(df["datetime"])
-            df.set_index("datetime", inplace=True)
-            # Forex/commodities have no centralized volume — select only available cols
-            cols = ["open", "high", "low", "close"]
-            df = df[cols].astype(float)
-            df["volume"] = 0.0  # placeholder; vol_ratio logic handles zero gracefully
-            df = df.sort_index()
+            df.columns = [c.lower() for c in df.columns]
+            df = df[["open", "high", "low", "close", "volume"]].copy()
+            df = df.dropna(subset=["open", "close"])
+            df["volume"] = df["volume"].fillna(0.0)
 
-            return df, f"Twelve Data ({symbol})"
+            # Ensure UTC-aware index
+            if df.index.tzinfo is None:
+                df.index = df.index.tz_localize("UTC")
+            else:
+                df.index = df.index.tz_convert("UTC")
+
+            df = df.sort_index().tail(limit)
+
+            return df, f"Yahoo Finance ({ticker})"
 
         except Exception as e:
-            return None, f"Twelve Data error: {e}"
+            return None, f"yfinance error: {e}"
 
 
 # ==================================================
@@ -1858,7 +1873,6 @@ def build_chart(df: pd.DataFrame, symbol: str, tf: str, result: Dict) -> go.Figu
 # ==================================================
 
 def main():
-    twelve_key = st.session_state.get("twelve_key", "")
     news_key = st.session_state.get("news_api_key", "")
     instruments = st.session_state.get("instruments", ["BTC/USDT", "XAU/USD"])
     timeframes = st.session_state.get("timeframes", ["15m", "1h", "4h", "1day"])
@@ -1867,7 +1881,7 @@ def main():
     max_risk = st.session_state.get("max_risk", 1.0)
     atr_multiplier = st.session_state.get("atr_multiplier", 2.0)
 
-    fetcher = DataFetcher(twelve_api_key=twelve_key)
+    fetcher = DataFetcher()
     sentiment_engine = SentimentEngine(api_key=news_key)
 
     tab1, tab2, tab3, tab4 = st.tabs(["  SIGNALS  ", "  CHARTS  ", "  NEWS  ", "  BACKTEST  "])
