@@ -27,74 +27,572 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    .main-header { font-size: 28px; font-weight: 700; color: #1A237E; margin-bottom: 10px; }
-    .section-header { font-size: 18px; font-weight: 600; color: #37474F; margin: 20px 0 10px 0;
-        padding-bottom: 8px; border-bottom: 2px solid #E3F2FD; }
-    .metric-card { background: #1E1E2E; border: 1px solid #3A3A5C; border-radius: 8px;
-        padding: 16px; margin: 8px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.3); color: #E0E0E0; }
-    .metric-card strong { color: #FFFFFF; }
-    .signal-buy { background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%); color: white;
-        padding: 12px; border-radius: 6px; font-weight: 700; text-align: center; }
-    .signal-sell { background: linear-gradient(135deg, #F44336 0%, #C62828 100%); color: white;
-        padding: 12px; border-radius: 6px; font-weight: 700; text-align: center; }
-    .signal-neutral { background: linear-gradient(135deg, #757575 0%, #424242 100%); color: white;
-        padding: 12px; border-radius: 6px; font-weight: 700; text-align: center; }
-    .news-positive { background: #1B5E20; color: #A5D6A7; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
-    .news-negative { background: #B71C1C; color: #FFCDD2; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
-    .news-neutral  { background: #37474F; color: #CFD8DC; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
-    .data-tag { background: #0D47A1; color: #BBDEFB; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
-    .warn-tag { background: #E65100; color: #FFE0B2; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
+
+    /* ── GLOBAL RESET ── */
+    html, body, [class*="css"] {
+        font-family: 'IBM Plex Sans', sans-serif;
+        background-color: #080C10;
+    }
+    .stApp { background-color: #080C10; }
+
+    /* ── SIDEBAR ── */
+    [data-testid="stSidebar"] {
+        background: #0C1117 !important;
+        border-right: 1px solid #1A2332 !important;
+    }
+    [data-testid="stSidebar"] * { color: #8A9BB0 !important; font-family: 'IBM Plex Sans', sans-serif !important; }
+    [data-testid="stSidebar"] .stMarkdown h3 {
+        color: #4A9EFF !important; font-size: 10px !important; font-weight: 600 !important;
+        letter-spacing: 2px !important; text-transform: uppercase !important;
+        border-bottom: 1px solid #1A2332 !important; padding-bottom: 6px !important;
+        margin-bottom: 12px !important;
+    }
+    [data-testid="stSidebar"] label { color: #5A7A9A !important; font-size: 11px !important; letter-spacing: 0.5px !important; }
+    [data-testid="stSidebar"] .stButton button {
+        background: #0F2340 !important; border: 1px solid #1E4080 !important;
+        color: #4A9EFF !important; font-family: 'IBM Plex Mono', monospace !important;
+        font-size: 11px !important; letter-spacing: 2px !important; font-weight: 600 !important;
+        transition: all 0.2s ease !important;
+    }
+    [data-testid="stSidebar"] .stButton button:hover {
+        background: #1E4080 !important; border-color: #4A9EFF !important;
+    }
+
+    /* ── TABS ── */
+    .stTabs [data-baseweb="tab-list"] {
+        background: #0C1117;
+        border-bottom: 1px solid #1A2332;
+        gap: 0;
+        padding: 0;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background: transparent;
+        color: #4A6080;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        padding: 14px 28px;
+        border: none;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s ease;
+    }
+    .stTabs [aria-selected="true"] {
+        background: transparent !important;
+        color: #4A9EFF !important;
+        border-bottom: 2px solid #4A9EFF !important;
+    }
+    .stTabs [data-baseweb="tab-panel"] { background: #080C10; padding-top: 24px; }
+
+    /* ── METRICS ── */
+    [data-testid="stMetric"] {
+        background: #0C1117;
+        border: 1px solid #1A2332;
+        border-radius: 2px;
+        padding: 14px 16px;
+    }
+    [data-testid="stMetricLabel"] {
+        font-family: 'IBM Plex Mono', monospace !important;
+        font-size: 9px !important;
+        font-weight: 600 !important;
+        letter-spacing: 2px !important;
+        text-transform: uppercase !important;
+        color: #4A6080 !important;
+    }
+    [data-testid="stMetricValue"] {
+        font-family: 'IBM Plex Mono', monospace !important;
+        font-size: 20px !important;
+        font-weight: 500 !important;
+        color: #D0E4FF !important;
+    }
+    [data-testid="stMetricDelta"] {
+        font-family: 'IBM Plex Mono', monospace !important;
+        font-size: 11px !important;
+    }
+
+    /* ── EXPANDER ── */
+    [data-testid="stExpander"] {
+        background: #0C1117 !important;
+        border: 1px solid #1A2332 !important;
+        border-radius: 2px !important;
+    }
+    [data-testid="stExpander"] summary {
+        font-family: 'IBM Plex Mono', monospace !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        letter-spacing: 1px !important;
+        color: #4A9EFF !important;
+        padding: 12px 16px !important;
+    }
+
+    /* ── SELECTBOX / INPUTS ── */
+    .stSelectbox > div > div, .stMultiSelect > div > div {
+        background: #0C1117 !important;
+        border: 1px solid #1A2332 !important;
+        border-radius: 2px !important;
+        color: #8A9BB0 !important;
+        font-family: 'IBM Plex Mono', monospace !important;
+        font-size: 12px !important;
+    }
+    .stSlider [data-baseweb="slider"] { color: #4A9EFF; }
+
+    /* ── DIVIDER ── */
+    hr { border-color: #1A2332 !important; margin: 20px 0 !important; }
+
+    /* ── SPINNER ── */
+    .stSpinner { color: #4A9EFF !important; }
+
+    /* ── DATAFRAME ── */
+    [data-testid="stDataFrame"] {
+        border: 1px solid #1A2332 !important;
+        border-radius: 2px !important;
+        font-family: 'IBM Plex Mono', monospace !important;
+        font-size: 11px !important;
+    }
+
+    /* ══════════════════════════════════
+       CUSTOM COMPONENTS
+    ══════════════════════════════════ */
+
+    /* Terminal header */
+    .term-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        padding: 0 0 20px 0;
+        border-bottom: 1px solid #1A2332;
+        margin-bottom: 28px;
+    }
+    .term-title {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 4px;
+        color: #4A9EFF;
+        text-transform: uppercase;
+    }
+    .term-subtitle {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 10px;
+        color: #2A4060;
+        letter-spacing: 2px;
+    }
+    .term-clock {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 11px;
+        color: #2A5080;
+        letter-spacing: 1px;
+    }
+
+    /* Section label */
+    .section-label {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #2A4060;
+        border-left: 2px solid #1A3050;
+        padding: 2px 0 2px 10px;
+        margin: 24px 0 16px 0;
+    }
+
+    /* Signal banner */
+    .signal-banner {
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-radius: 2px;
+        margin-bottom: 4px;
+    }
+    .signal-banner-bull {
+        background: linear-gradient(90deg, #0A2A1A 0%, #0D3520 100%);
+        border: 1px solid #1A5A2A;
+        border-left: 3px solid #00C853;
+    }
+    .signal-banner-bear {
+        background: linear-gradient(90deg, #2A0A0A 0%, #350D0D 100%);
+        border: 1px solid #5A1A1A;
+        border-left: 3px solid #FF1744;
+    }
+    .signal-banner-neutral {
+        background: linear-gradient(90deg, #0F1520 0%, #111820 100%);
+        border: 1px solid #1A2A40;
+        border-left: 3px solid #2A4060;
+    }
+    .signal-label {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: 3px;
+    }
+    .signal-label-bull { color: #00C853; }
+    .signal-label-bear { color: #FF1744; }
+    .signal-label-neutral { color: #2A5080; }
+    .signal-sub {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 10px;
+        letter-spacing: 2px;
+        margin-top: 4px;
+    }
+    .signal-sub-bull { color: #1A6A3A; }
+    .signal-sub-bear { color: #6A1A1A; }
+    .signal-sub-neutral { color: #1A3050; }
+    .signal-conf {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 28px;
+        font-weight: 300;
+        letter-spacing: -1px;
+    }
+    .signal-conf-bull { color: #00C853; }
+    .signal-conf-bear { color: #FF1744; }
+    .signal-conf-neutral { color: #2A5080; }
+
+    /* TF card */
+    .tf-card {
+        padding: 14px 12px;
+        border-radius: 2px;
+        text-align: center;
+        border-top: 2px solid transparent;
+    }
+    .tf-card-bull {
+        background: #080F0A;
+        border: 1px solid #0F2A14;
+        border-top: 2px solid #00C853;
+    }
+    .tf-card-bear {
+        background: #0F0808;
+        border: 1px solid #2A0F0F;
+        border-top: 2px solid #FF1744;
+    }
+    .tf-card-neutral {
+        background: #090C10;
+        border: 1px solid #121820;
+        border-top: 2px solid #1A3050;
+    }
+    .tf-label {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 2px;
+        color: #4A6080;
+        margin-bottom: 6px;
+    }
+    .tf-bias {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 2px;
+    }
+    .tf-bias-bull { color: #00C853; }
+    .tf-bias-bear { color: #FF1744; }
+    .tf-bias-neutral { color: #2A5080; }
+    .tf-conf {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 22px;
+        font-weight: 300;
+        letter-spacing: -1px;
+        margin: 4px 0;
+    }
+    .tf-conf-bull { color: #00A040; }
+    .tf-conf-bear { color: #CC1030; }
+    .tf-conf-neutral { color: #1A3050; }
+    .tf-votes {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 10px;
+        color: #2A4060;
+        letter-spacing: 1px;
+    }
+    .tf-source {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 9px;
+        color: #1A2A3A;
+        letter-spacing: 1px;
+        margin-top: 4px;
+        text-transform: uppercase;
+    }
+
+    /* Risk table */
+    .risk-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        background: #1A2332;
+        border: 1px solid #1A2332;
+        border-radius: 2px;
+        margin: 16px 0;
+        overflow: hidden;
+    }
+    .risk-cell {
+        background: #0C1117;
+        padding: 12px 16px;
+        text-align: center;
+    }
+    .risk-cell-label {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 9px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: #2A4060;
+        margin-bottom: 6px;
+    }
+    .risk-cell-value {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 16px;
+        font-weight: 500;
+        color: #8AB4D8;
+    }
+    .risk-cell-delta {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 10px;
+        color: #2A5070;
+        margin-top: 2px;
+    }
+
+    /* Rationale row */
+    .rationale-row {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 11px;
+        color: #4A6A8A;
+        padding: 5px 0;
+        border-bottom: 1px solid #0F1520;
+        letter-spacing: 0.3px;
+    }
+    .rationale-tf-header {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 3px;
+        color: #2A5080;
+        text-transform: uppercase;
+        padding: 12px 0 6px 0;
+        margin-top: 8px;
+        border-top: 1px solid #0F1A28;
+    }
+
+    /* News card */
+    .news-card {
+        background: #0C1117;
+        border: 1px solid #1A2332;
+        border-radius: 2px;
+        padding: 16px 20px;
+        margin: 8px 0;
+        border-left: 3px solid #1A3050;
+    }
+    .news-card-bull { border-left-color: #00C853; }
+    .news-card-bear { border-left-color: #FF1744; }
+    .news-card-neutral { border-left-color: #2A4060; }
+    .news-title {
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 13px;
+        font-weight: 500;
+        color: #C0D4E8;
+        margin-bottom: 6px;
+        line-height: 1.4;
+    }
+    .news-desc {
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 11px;
+        color: #4A6A8A;
+        margin-bottom: 10px;
+        line-height: 1.5;
+    }
+    .news-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .news-source {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 10px;
+        color: #2A4060;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+    }
+    .news-score-bull {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 10px;
+        color: #00C853;
+        background: #061A0C;
+        border: 1px solid #0A3018;
+        padding: 2px 8px;
+        border-radius: 1px;
+        letter-spacing: 1px;
+    }
+    .news-score-bear {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 10px;
+        color: #FF1744;
+        background: #1A0606;
+        border: 1px solid #300A0A;
+        padding: 2px 8px;
+        border-radius: 1px;
+        letter-spacing: 1px;
+    }
+    .news-score-neutral {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 10px;
+        color: #2A5070;
+        background: #080E16;
+        border: 1px solid #1A2A38;
+        padding: 2px 8px;
+        border-radius: 1px;
+        letter-spacing: 1px;
+    }
+    .vader-bar-bg {
+        height: 2px;
+        background: #0F1A28;
+        margin: 8px 0;
+        border-radius: 1px;
+    }
+
+    /* Backtest stat card */
+    .bt-stat {
+        background: #0C1117;
+        border: 1px solid #1A2332;
+        border-radius: 2px;
+        padding: 16px;
+        text-align: center;
+    }
+    .bt-stat-label {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 9px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: #2A4060;
+        margin-bottom: 8px;
+    }
+    .bt-stat-value {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 24px;
+        font-weight: 300;
+        color: #8AB4D8;
+    }
+
+    /* SMC badge */
+    .smc-badge {
+        display: inline-block;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 9px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        padding: 3px 8px;
+        border-radius: 1px;
+        margin: 2px;
+    }
+    .smc-bull { background: #061A0C; color: #00C853; border: 1px solid #0A3018; }
+    .smc-bear { background: #1A0606; color: #FF1744; border: 1px solid #300A0A; }
+    .smc-info { background: #060E1A; color: #4A9EFF; border: 1px solid #0A1A30; }
+
+    /* Data tag */
+    .data-tag {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 9px;
+        letter-spacing: 1px;
+        background: #060E1A;
+        color: #2A5080;
+        border: 1px solid #0A1A30;
+        padding: 2px 6px;
+        border-radius: 1px;
+        text-transform: uppercase;
+    }
+
+    /* Fib row */
+    .fib-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 1px;
+        background: #1A2332;
+        border: 1px solid #1A2332;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 12px;
+    }
+    .fib-cell {
+        background: #0C1117;
+        padding: 10px 8px;
+        text-align: center;
+    }
+    .fib-level {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 9px;
+        color: #2A4060;
+        letter-spacing: 1px;
+        margin-bottom: 4px;
+    }
+    .fib-price {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 12px;
+        color: #4A9EFF;
+        font-weight: 500;
+    }
+
+    /* hide streamlit chrome */
+    #MainMenu, footer, header { visibility: hidden; }
+    .block-container { padding-top: 24px !important; padding-bottom: 24px !important; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-header">🏛️ INSTITUTIONAL MULTI-TIMEFRAME ANALYZER</div>', unsafe_allow_html=True)
-st.markdown('**Real OHLC Data • Smart Money Concepts • VADER Sentiment • Multi-TF Confirmation • Backtesting**')
+# ── TERMINAL HEADER ──
+now_utc = datetime.utcnow().strftime('%Y-%m-%d  %H:%M:%S  UTC')
+st.markdown(f"""
+<div class="term-header">
+  <div>
+    <div class="term-title">▐ INSTITUTIONAL TERMINAL</div>
+    <div class="term-subtitle">SMART MONEY · MULTI-TIMEFRAME · REAL OHLCV · VADER SENTIMENT · BACKTEST</div>
+  </div>
+  <div class="term-clock">{now_utc}</div>
+</div>
+""", unsafe_allow_html=True)
 
 # ==================================================
 # SIDEBAR
 # ==================================================
 with st.sidebar:
-    st.markdown("### ⚙️ SETTINGS")
+    st.markdown("### ── CONFIG ──")
 
-    with st.expander("🔑 API KEYS", expanded=True):
-        st.markdown("**Twelve Data API** (Forex/Gold OHLC)")
-        twelve_key = st.text_input("Twelve Data Key", type="password", key="twelve_key",
-                                   help="Free tier: 800 calls/day. Get at twelvedata.com")
-        st.markdown("**NewsData.io** (Optional)")
-        news_api_key = st.text_input("NewsData Key", type="password", key="news_api_key")
-        st.caption("Crypto: Kraken → Coinbase → CoinGecko (all free, no key). Forex/Gold: Twelve Data key required.")
+    with st.expander("API KEYS", expanded=True):
+        st.markdown("**TWELVE DATA** · Forex / Gold")
+        twelve_key = st.text_input("Key", type="password", key="twelve_key",
+                                   help="Free tier: 800 calls/day — twelvedata.com")
+        st.markdown("**NEWSDATA.IO** · Optional")
+        news_api_key = st.text_input("Key", type="password", key="news_api_key")
+        st.caption("Crypto: Kraken → Coinbase → CoinGecko (free). Forex/Gold: Twelve Data required.")
 
-    st.markdown("### 📊 INSTRUMENTS")
+    st.markdown("### ── INSTRUMENTS ──")
     instruments = st.multiselect(
-        "Select Instruments",
+        "Markets",
         ["BTC/USDT", "ETH/USDT", "XAU/USD", "EUR/USD", "GBP/USD", "USD/JPY"],
         default=["BTC/USDT", "XAU/USD"],
         key="instruments"
     )
 
-    st.markdown("### ⏰ TIMEFRAMES")
+    st.markdown("### ── TIMEFRAMES ──")
     timeframes = st.multiselect(
-        "Analysis Timeframes",
+        "Frames",
         ["15m", "1h", "4h", "1day"],
         default=["15m", "1h", "4h", "1day"],
         key="timeframes"
     )
 
-    st.markdown("### 🎯 SIGNAL PARAMETERS")
+    st.markdown("### ── SIGNAL PARAMS ──")
     min_confidence = st.slider("Min Confidence %", 0, 100, 60, key="min_confidence")
-    require_htf = st.checkbox("Require Higher TF Confirmation", value=True, key="require_htf")
+    require_htf = st.checkbox("Require HTF Confirmation", value=True, key="require_htf")
 
-    st.markdown("### 🛡️ RISK MANAGEMENT")
+    st.markdown("### ── RISK MGMT ──")
     max_risk = st.slider("Max Risk per Trade %", 0.1, 5.0, 1.0, 0.1, key="max_risk")
     atr_multiplier = st.slider("ATR Stop Multiplier", 1.0, 5.0, 2.0, 0.1, key="atr_multiplier")
 
     st.divider()
-    run_btn = st.button("🔄 RUN ANALYSIS", type="primary", use_container_width=True)
+    run_btn = st.button("◈  REFRESH ANALYSIS", type="primary", use_container_width=True)
     if run_btn:
         st.cache_data.clear()
         st.rerun()
 
-    st.caption(f"Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+    st.caption(f"SYS · {datetime.utcnow().strftime('%H:%M:%S UTC')}")
 
 
 # ==================================================
@@ -1486,140 +1984,181 @@ def main():
     fetcher = DataFetcher(twelve_api_key=twelve_key)
     sentiment_engine = SentimentEngine(api_key=news_key)
 
-    tab1, tab2, tab3, tab4 = st.tabs(["📈 SIGNALS", "📊 CHARTS", "📰 NEWS", "🧪 BACKTEST"])
+    tab1, tab2, tab3, tab4 = st.tabs(["  SIGNALS  ", "  CHARTS  ", "  NEWS  ", "  BACKTEST  "])
 
     # ========== TAB 1: SIGNALS ==========
     with tab1:
-        st.markdown('<div class="section-header">LIVE MULTI-TIMEFRAME SIGNALS</div>',
-                    unsafe_allow_html=True)
+        st.markdown('<div class="section-label">Live Multi-Timeframe Signal Matrix</div>', unsafe_allow_html=True)
 
         if not instruments:
             st.warning("Select instruments in the sidebar.")
             return
 
         for symbol in instruments:
-            with st.expander(f"🔍 {symbol}", expanded=True):
-                # Fetch real data for all timeframes
+            with st.expander(f"  {symbol}  ·  MARKET ANALYSIS", expanded=True):
                 data = {}
-                with st.spinner(f"Fetching real OHLCV for {symbol}..."):
+                with st.spinner(f"Loading {symbol}..."):
                     for tf in timeframes:
                         df, source = fetcher.fetch(symbol, tf, limit=300)
                         if df is not None and len(df) >= 50:
                             data[tf] = (df, source)
                         else:
-                            st.warning(f"⚠️ {symbol} {tf}: {source}")
+                            st.caption(f"⚠ {symbol} {tf}: {source}")
 
                 if not data:
-                    st.error(f"No data available for {symbol}. Check API key.")
+                    st.error(f"No data available for {symbol}")
                     continue
 
-                # Run analysis
                 analyzer = MultiTimeframeAnalyzer(data, timeframes)
                 consolidated = analyzer.get_consolidated_signal(
                     min_conf=min_confidence, require_htf=require_htf
                 )
 
-                # Main signal display
-                col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
-                with col1:
-                    sig = consolidated['signal']
-                    valid = consolidated['valid']
-                    if sig == 'BULLISH':
-                        icon = "📈 BULLISH" + (" ✅ VALID" if valid else " ⚠️ UNCONFIRMED")
-                        st.markdown(f'<div class="signal-buy">{icon}</div>', unsafe_allow_html=True)
-                    elif sig == 'BEARISH':
-                        icon = "📉 BEARISH" + (" ✅ VALID" if valid else " ⚠️ UNCONFIRMED")
-                        st.markdown(f'<div class="signal-sell">{icon}</div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown('<div class="signal-neutral">⚖️ NO CLEAR SIGNAL</div>',
-                                    unsafe_allow_html=True)
+                sig = consolidated['signal']
+                valid = consolidated['valid']
+                conf = consolidated['confidence']
+                price = consolidated['price']
+                atr_val = consolidated['atr']
 
-                with col2:
-                    st.metric("Confidence", f"{consolidated['confidence']:.1f}%")
-                with col3:
-                    st.metric("Price", f"{consolidated['price']:.4f}")
-                with col4:
-                    st.metric("HTF Confirmed", "✅ Yes" if consolidated['htf_confirmed'] else "❌ No")
-                with col5:
-                    atr_val = consolidated['atr']
-                    st.metric("ATR", f"{atr_val:.4f}")
+                # ── SIGNAL BANNER ──
+                if sig == 'BULLISH':
+                    banner_cls = 'signal-banner-bull'
+                    label_cls = 'signal-label-bull'
+                    sub_cls = 'signal-sub-bull'
+                    conf_cls = 'signal-conf-bull'
+                    label_txt = 'LONG  ▲'
+                    sub_txt = 'CONFIRMED' if valid else 'UNCONFIRMED — HTF MISALIGN'
+                elif sig == 'BEARISH':
+                    banner_cls = 'signal-banner-bear'
+                    label_cls = 'signal-label-bear'
+                    sub_cls = 'signal-sub-bear'
+                    conf_cls = 'signal-conf-bear'
+                    label_txt = 'SHORT  ▼'
+                    sub_txt = 'CONFIRMED' if valid else 'UNCONFIRMED — HTF MISALIGN'
+                else:
+                    banner_cls = 'signal-banner-neutral'
+                    label_cls = 'signal-label-neutral'
+                    sub_cls = 'signal-sub-neutral'
+                    conf_cls = 'signal-conf-neutral'
+                    label_txt = 'NO SIGNAL  ◆'
+                    sub_txt = 'AWAIT CONFLUENCE'
 
-                # Risk management levels
-                if sig != 'NEUTRAL' and consolidated['price'] > 0 and atr_val > 0:
-                    price = consolidated['price']
+                st.markdown(f"""
+                <div class="signal-banner {banner_cls}">
+                  <div>
+                    <div class="signal-label {label_cls}">{label_txt}</div>
+                    <div class="signal-sub {sub_cls}">{sub_txt}</div>
+                  </div>
+                  <div style="text-align:right">
+                    <div class="signal-conf {conf_cls}">{conf:.1f}<span style="font-size:14px;letter-spacing:0">%</span></div>
+                    <div class="signal-sub {sub_cls}">CONFIDENCE</div>
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # ── KEY METRICS ROW ──
+                mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+                mc1.metric("PRICE", f"{price:.4f}")
+                mc2.metric("ATR", f"{atr_val:.4f}")
+                mc3.metric("HTF ALIGN", "YES" if consolidated['htf_confirmed'] else "NO")
+                mc4.metric("BULL TF", len(consolidated['bull_tfs']))
+                mc5.metric("BEAR TF", len(consolidated['bear_tfs']))
+
+                # ── RISK LEVELS ──
+                if sig != 'NEUTRAL' and price > 0 and atr_val > 0:
                     if sig == 'BULLISH':
                         stop = price - atr_val * atr_multiplier
                         target = price + atr_val * atr_multiplier * 2
+                        stop_pct = f"−{abs((stop-price)/price*100):.2f}%"
+                        tgt_pct  = f"+{abs((target-price)/price*100):.2f}%"
                     else:
                         stop = price + atr_val * atr_multiplier
                         target = price - atr_val * atr_multiplier * 2
+                        stop_pct = f"+{abs((stop-price)/price*100):.2f}%"
+                        tgt_pct  = f"−{abs((target-price)/price*100):.2f}%"
 
                     sizing = calculate_position_size(10000, max_risk, price, stop)
-                    with st.container():
-                        rc1, rc2, rc3, rc4 = st.columns(4)
-                        rc1.metric("Entry", f"{price:.4f}")
-                        rc2.metric("Stop Loss", f"{stop:.4f}",
-                                   delta=f"{(stop-price)/price*100:.2f}%",
-                                   delta_color="inverse")
-                        rc3.metric("Target (2:1)", f"{target:.4f}",
-                                   delta=f"{(target-price)/price*100:.2f}%")
-                        rc4.metric("Risk Amount", f"${sizing.get('risk_amount', 0):.0f}",
-                                   help="Based on $10,000 account")
+                    st.markdown(f"""
+                    <div class="risk-row">
+                      <div class="risk-cell">
+                        <div class="risk-cell-label">Entry</div>
+                        <div class="risk-cell-value">{price:.4f}</div>
+                        <div class="risk-cell-delta">CURRENT</div>
+                      </div>
+                      <div class="risk-cell">
+                        <div class="risk-cell-label">Stop Loss</div>
+                        <div class="risk-cell-value" style="color:#FF4444">{stop:.4f}</div>
+                        <div class="risk-cell-delta">{stop_pct} · ATR×{atr_multiplier}</div>
+                      </div>
+                      <div class="risk-cell">
+                        <div class="risk-cell-label">Target  2:1</div>
+                        <div class="risk-cell-value" style="color:#00C853">{target:.4f}</div>
+                        <div class="risk-cell-delta">{tgt_pct} · ATR×{atr_multiplier*2}</div>
+                      </div>
+                      <div class="risk-cell">
+                        <div class="risk-cell-label">Risk  $10K Acct</div>
+                        <div class="risk-cell-value">${sizing.get('risk_amount', 0):.0f}</div>
+                        <div class="risk-cell-delta">{max_risk}% of equity</div>
+                      </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                # Per-timeframe breakdown
-                st.markdown("#### Timeframe Breakdown")
+                # ── TIMEFRAME BREAKDOWN ──
+                st.markdown('<div class="section-label">Timeframe Matrix</div>', unsafe_allow_html=True)
                 tf_cols = st.columns(len(analyzer.results))
                 for idx, (tf, res) in enumerate(analyzer.results.items()):
+                    bias = res['bias']
+                    conf_tf = res['confidence']
+                    sig_counts = res['signals']
+                    source_label = res['source'].split('(')[0].strip()
+
+                    if bias == 'BULLISH':
+                        card_cls = 'tf-card-bull'
+                        bias_cls = 'tf-bias-bull'
+                        conf_cls = 'tf-conf-bull'
+                    elif bias == 'BEARISH':
+                        card_cls = 'tf-card-bear'
+                        bias_cls = 'tf-bias-bear'
+                        conf_cls = 'tf-conf-bear'
+                    else:
+                        card_cls = 'tf-card-neutral'
+                        bias_cls = 'tf-bias-neutral'
+                        conf_cls = 'tf-conf-neutral'
+
                     with tf_cols[idx]:
-                        bias = res['bias']
-                        conf = res['confidence']
-                        sig_counts = res['signals']
-                        source_label = res['source'].split('(')[0].strip()
-
-                        if bias == 'BULLISH':
-                            bg = '#4CAF5020'
-                            emoji = '🟢'
-                        elif bias == 'BEARISH':
-                            bg = '#F4433620'
-                            emoji = '🔴'
-                        else:
-                            bg = '#75757520'
-                            emoji = '⚪'
-
                         st.markdown(f"""
-                        <div style='background:{bg}; padding:10px; border-radius:5px; text-align:center;'>
-                        <b>{tf}</b><br>
-                        {emoji} <b>{bias}</b><br>
-                        {conf:.0f}% conf<br>
-                        <small>🟢{sig_counts['bull_votes']} 🔴{sig_counts['bear_votes']}</small><br>
-                        <small style='color:#999'>{source_label}</small>
+                        <div class="tf-card {card_cls}">
+                          <div class="tf-label">{tf}</div>
+                          <div class="tf-bias {bias_cls}">{bias}</div>
+                          <div class="tf-conf {conf_cls}">{conf_tf:.0f}<span style="font-size:11px">%</span></div>
+                          <div class="tf-votes">▲{sig_counts['bull_votes']}  ▼{sig_counts['bear_votes']}  of {sig_counts['total_votes']}</div>
+                          <div class="tf-source">{source_label}</div>
                         </div>
                         """, unsafe_allow_html=True)
 
-                # Signal reasons
-                with st.expander("📋 Full Signal Rationale"):
+                # ── SIGNAL RATIONALE ──
+                with st.expander("SIGNAL RATIONALE  ·  SMART MONEY PATTERNS"):
                     for tf, res in analyzer.results.items():
-                        st.markdown(f"**{tf} — {res['bias']} ({res['confidence']:.1f}%)**")
+                        st.markdown(f'<div class="rationale-tf-header">{tf}  ·  {res["bias"]}  ·  {res["confidence"]:.1f}%</div>', unsafe_allow_html=True)
                         for reason in res['signals']['reasons']:
-                            st.markdown(f"  {reason}")
-                        # Smart money summary
-                        smc_items = []
-                        for ob in res['order_blocks'][-2:]:
-                            smc_items.append(f"  🧱 {ob['type']} @ {ob['bottom']:.4f}–{ob['top']:.4f}")
-                        for fvg in res['fvgs'][-2:]:
-                            smc_items.append(f"  🕳️ {fvg['type']} @ {fvg['bottom']:.4f}–{fvg['top']:.4f}")
+                            st.markdown(f'<div class="rationale-row">{reason}</div>', unsafe_allow_html=True)
+
+                        # SMC badges
+                        smc_html = ""
+                        for ob in res['order_blocks'][-3:]:
+                            cls = 'smc-bull' if 'BULLISH' in ob['type'] else 'smc-bear'
+                            smc_html += f'<span class="smc-badge {cls}">{ob["type"].replace("_"," ")} @ {ob["bottom"]:.4f}–{ob["top"]:.4f}</span>'
+                        for fvg in res['fvgs'][-3:]:
+                            cls = 'smc-bull' if 'BULLISH' in fvg['type'] else 'smc-bear'
+                            smc_html += f'<span class="smc-badge {cls}">{fvg["type"].replace("_"," ")} @ {fvg["bottom"]:.4f}–{fvg["top"]:.4f}</span>'
                         for sw in res['sweeps'][-2:]:
-                            smc_items.append(f"  💧 {sw['type']} @ {sw['price']:.4f}")
-                        if smc_items:
-                            st.markdown("  **Smart Money Patterns:**")
-                            for item in smc_items:
-                                st.markdown(item)
-                        st.divider()
+                            smc_html += f'<span class="smc-badge smc-info">{sw["type"].replace("_"," ")} @ {sw["price"]:.4f}</span>'
+                        if smc_html:
+                            st.markdown(f'<div style="margin:10px 0 4px 0">{smc_html}</div>', unsafe_allow_html=True)
 
     # ========== TAB 2: CHARTS ==========
     with tab2:
-        st.markdown('<div class="section-header">INSTITUTIONAL CHARTS</div>',
-                    unsafe_allow_html=True)
+        st.markdown('<div class="section-label">Price Chart · Institutional Levels</div>', unsafe_allow_html=True)
 
         col1, col2 = st.columns(2)
         chart_symbol = col1.selectbox("Instrument", instruments, key="chart_symbol")
@@ -1630,13 +2169,13 @@ def main():
                 df, source = fetcher.fetch(chart_symbol, chart_tf, limit=300)
 
                 if df is not None and len(df) > 50:
-                    # Get cached analysis result if available
-                    st.caption(f"<span class='data-tag'>Data: {source}</span> "
-                               f"<span class='data-tag'>{len(df)} bars</span> "
-                               f"Last: {df.index[-1].strftime('%Y-%m-%d %H:%M UTC')}"
-                               , unsafe_allow_html=True)
+                    st.markdown(
+                        f'<span class="data-tag">SOURCE · {source.upper()}</span>&nbsp;'
+                        f'<span class="data-tag">BARS · {len(df)}</span>&nbsp;'
+                        f'<span class="data-tag">LAST · {df.index[-1].strftime("%Y-%m-%d %H:%M UTC")}</span>',
+                        unsafe_allow_html=True
+                    )
 
-                    # Quick analysis for chart overlay
                     ind = Indicators()
                     atr_s = ind.atr(df['high'], df['low'], df['close'])
                     smc = SmartMoneyEngine(df, atr_s)
@@ -1651,83 +2190,118 @@ def main():
                     fig = build_chart(df, chart_symbol, chart_tf, quick_result)
                     st.plotly_chart(fig, use_container_width=True)
 
-                    # Fibonacci table
-                    fib = {
-                        '0.0': float(df['high'].tail(50).max()),
-                        '0.236': float(df['high'].tail(50).max() - (df['high'].tail(50).max() - df['low'].tail(50).min()) * 0.236),
-                        '0.382': float(df['high'].tail(50).max() - (df['high'].tail(50).max() - df['low'].tail(50).min()) * 0.382),
-                        '0.5': float(df['high'].tail(50).max() - (df['high'].tail(50).max() - df['low'].tail(50).min()) * 0.5),
-                        '0.618': float(df['high'].tail(50).max() - (df['high'].tail(50).max() - df['low'].tail(50).min()) * 0.618),
-                        '1.0': float(df['low'].tail(50).min()),
+                    # Fibonacci levels
+                    high50 = float(df['high'].tail(50).max())
+                    low50  = float(df['low'].tail(50).min())
+                    diff   = high50 - low50
+                    fibs   = {
+                        '0.000': high50,
+                        '0.236': high50 - diff * 0.236,
+                        '0.382': high50 - diff * 0.382,
+                        '0.500': high50 - diff * 0.500,
+                        '0.618': high50 - diff * 0.618,
+                        '1.000': low50,
                     }
-                    st.markdown("**Fibonacci Levels (last 50 bars)**")
-                    fib_cols = st.columns(len(fib))
-                    for i, (level, price) in enumerate(fib.items()):
-                        fib_cols[i].metric(f"Fib {level}", f"{price:.4f}")
+                    st.markdown('<div class="section-label">Fibonacci Retracement · Last 50 Bars</div>', unsafe_allow_html=True)
+                    fib_html = '<div class="fib-grid">'
+                    for level, fprice in fibs.items():
+                        fib_html += f'<div class="fib-cell"><div class="fib-level">FIB {level}</div><div class="fib-price">{fprice:.4f}</div></div>'
+                    fib_html += '</div>'
+                    st.markdown(fib_html, unsafe_allow_html=True)
                 else:
                     st.error(f"Chart data unavailable: {source}")
 
     # ========== TAB 3: NEWS ==========
     with tab3:
-        st.markdown('<div class="section-header">NEWS & VADER SENTIMENT ANALYSIS</div>',
-                    unsafe_allow_html=True)
-        st.caption("Sentiment scored using VADER compound score (range: -1 bearish → +1 bullish)")
+        st.markdown('<div class="section-label">News Sentiment · VADER NLP Scoring</div>', unsafe_allow_html=True)
 
         news_symbol = st.selectbox("Instrument", instruments, key="news_sym")
 
-        with st.spinner("Analyzing news sentiment..."):
+        with st.spinner("Analyzing..."):
             articles = sentiment_engine.fetch_and_analyze(news_symbol)
 
         if articles:
-            # Aggregate sentiment
             compounds = [a['compound'] for a in articles]
             avg_compound = np.mean(compounds)
-            overall = "📈 BULLISH BIAS" if avg_compound > 0.05 else (
-                "📉 BEARISH BIAS" if avg_compound < -0.05 else "⚖️ NEUTRAL")
 
-            mc1, mc2, mc3 = st.columns(3)
-            mc1.metric("Avg VADER Score", f"{avg_compound:.3f}")
-            mc2.metric("Overall Sentiment", overall)
-            mc3.metric("Articles Analyzed", len(articles))
+            if avg_compound > 0.05:
+                overall_txt = "BULLISH BIAS"
+                overall_col = "#00C853"
+            elif avg_compound < -0.05:
+                overall_txt = "BEARISH BIAS"
+                overall_col = "#FF1744"
+            else:
+                overall_txt = "NEUTRAL"
+                overall_col = "#2A5080"
 
-            st.divider()
+            # Aggregate row
+            st.markdown(f"""
+            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:1px;
+                        background:#1A2332; border:1px solid #1A2332; border-radius:2px;
+                        overflow:hidden; margin-bottom:20px;">
+              <div style="background:#0C1117; padding:16px; text-align:center">
+                <div style="font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:2px;
+                            color:#2A4060; margin-bottom:8px; text-transform:uppercase">Avg VADER Score</div>
+                <div style="font-family:'IBM Plex Mono',monospace; font-size:28px; font-weight:300;
+                            color:{overall_col}">{avg_compound:+.3f}</div>
+              </div>
+              <div style="background:#0C1117; padding:16px; text-align:center">
+                <div style="font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:2px;
+                            color:#2A4060; margin-bottom:8px; text-transform:uppercase">Sentiment Bias</div>
+                <div style="font-family:'IBM Plex Mono',monospace; font-size:18px; font-weight:600;
+                            letter-spacing:3px; color:{overall_col}">{overall_txt}</div>
+              </div>
+              <div style="background:#0C1117; padding:16px; text-align:center">
+                <div style="font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:2px;
+                            color:#2A4060; margin-bottom:8px; text-transform:uppercase">Articles Analyzed</div>
+                <div style="font-family:'IBM Plex Mono',monospace; font-size:28px; font-weight:300;
+                            color:#4A9EFF">{len(articles)}</div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
 
             for a in articles:
-                sent_class = f"news-{a['sentiment']}"
                 compound = a.get('compound', 0)
-                bar_width = int(abs(compound) * 100)
-                bar_color = '#4CAF50' if compound > 0 else ('#F44336' if compound < 0 else '#9E9E9E')
+                bar_pct = int(abs(compound) * 100)
+                if compound > 0.05:
+                    card_cls = 'news-card-bull'
+                    score_cls = 'news-score-bull'
+                    bar_color = '#00C853'
+                elif compound < -0.05:
+                    card_cls = 'news-card-bear'
+                    score_cls = 'news-score-bear'
+                    bar_color = '#FF1744'
+                else:
+                    card_cls = 'news-card-neutral'
+                    score_cls = 'news-score-neutral'
+                    bar_color = '#2A4060'
 
                 st.markdown(f"""
-                <div class="metric-card">
-                    <div style="display:flex; justify-content:space-between; align-items:start;">
-                        <strong style="flex:1; color:#FFFFFF">{a['title']}</strong>
-                        <span class="{sent_class}" style="margin-left:10px; white-space:nowrap">{a['sentiment'].upper()}</span>
-                    </div>
-                    <div style="color:#B0BEC5; font-size:0.9em; margin:6px 0">{a['description']}</div>
-                    <div style="height:4px; background:#2A2A3E; border-radius:2px; margin:4px 0">
-                        <div style="height:4px; width:{bar_width}%; background:{bar_color}; border-radius:2px"></div>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; font-size:0.8em; color:#78909C">
-                        <span>{a['source']}</span>
-                        <span>VADER: {compound:.3f} | {a['published']}</span>
-                    </div>
+                <div class="news-card {card_cls}">
+                  <div class="news-title">{a['title']}</div>
+                  <div class="news-desc">{a['description']}</div>
+                  <div class="vader-bar-bg">
+                    <div style="height:2px; width:{bar_pct}%; background:{bar_color}; border-radius:1px;
+                                transition:width 0.3s ease;"></div>
+                  </div>
+                  <div class="news-meta">
+                    <span class="news-source">{a['source']}  ·  {a['published']}</span>
+                    <span class="{score_cls}">VADER {compound:+.3f}</span>
+                  </div>
                 </div>
                 """, unsafe_allow_html=True)
 
     # ========== TAB 4: BACKTEST ==========
     with tab4:
-        st.markdown('<div class="section-header">HISTORICAL BACKTEST</div>',
-                    unsafe_allow_html=True)
-        st.caption("Strategy: EMA stack (9>21>50) + RSI 45–70 + MACD cross. ATR-based stops. 2:1 RR.")
+        st.markdown('<div class="section-label">Historical Backtest · EMA Stack + RSI + MACD · ATR Stops · 2:1 RR</div>', unsafe_allow_html=True)
 
         bt_col1, bt_col2, bt_col3 = st.columns(3)
-        bt_symbol = bt_col1.selectbox("Symbol", instruments, key="bt_sym")
-        bt_tf = bt_col2.selectbox("Timeframe", timeframes, key="bt_tf")
+        bt_symbol  = bt_col1.selectbox("Symbol", instruments, key="bt_sym")
+        bt_tf      = bt_col2.selectbox("Timeframe", timeframes, key="bt_tf")
         bt_account = bt_col3.number_input("Account Size ($)", value=10000, step=1000, key="bt_acct")
 
-        if st.button("▶️ Run Backtest", type="primary"):
-            with st.spinner("Fetching data and running backtest..."):
+        if st.button("  ▶  RUN BACKTEST  ", type="primary"):
+            with st.spinner("Running simulation..."):
                 df, source = fetcher.fetch(bt_symbol, bt_tf, limit=500)
 
                 if df is None or len(df) < 100:
@@ -1739,49 +2313,92 @@ def main():
                     if 'error' in results:
                         st.error(results['error'])
                     else:
-                        # Metrics
-                        m1, m2, m3, m4, m5, m6 = st.columns(6)
-                        m1.metric("Total Trades", results['total_trades'])
-                        m2.metric("Win Rate", f"{results['win_rate']:.1f}%")
-                        m3.metric("Profit Factor",
-                                  f"{results['profit_factor']:.2f}" if results['profit_factor'] != float('inf') else "∞")
-                        m4.metric("Net P&L", f"${results['total_pnl']:.0f}",
-                                  delta=f"{results['total_pnl']/bt_account*100:.1f}%")
-                        m5.metric("Max Drawdown", f"{results['max_drawdown_pct']:.1f}%",
-                                  delta_color="inverse")
-                        m6.metric("Sharpe Ratio", f"{results['sharpe']:.2f}")
+                        pnl = results['total_pnl']
+                        pnl_color = "#00C853" if pnl >= 0 else "#FF1744"
+                        pf = results['profit_factor']
+                        pf_str = f"{pf:.2f}" if pf != float('inf') else "∞"
+
+                        # Stat grid
+                        st.markdown(f"""
+                        <div style="display:grid; grid-template-columns:repeat(6,1fr); gap:1px;
+                                    background:#1A2332; border:1px solid #1A2332;
+                                    border-radius:2px; overflow:hidden; margin-bottom:20px;">
+                          <div class="bt-stat">
+                            <div class="bt-stat-label">Total Trades</div>
+                            <div class="bt-stat-value">{results['total_trades']}</div>
+                          </div>
+                          <div class="bt-stat">
+                            <div class="bt-stat-label">Win Rate</div>
+                            <div class="bt-stat-value">{results['win_rate']:.1f}<span style="font-size:14px">%</span></div>
+                          </div>
+                          <div class="bt-stat">
+                            <div class="bt-stat-label">Profit Factor</div>
+                            <div class="bt-stat-value">{pf_str}</div>
+                          </div>
+                          <div class="bt-stat">
+                            <div class="bt-stat-label">Net P&L</div>
+                            <div class="bt-stat-value" style="color:{pnl_color}">${pnl:+.0f}</div>
+                          </div>
+                          <div class="bt-stat">
+                            <div class="bt-stat-label">Max Drawdown</div>
+                            <div class="bt-stat-value" style="color:#FF4444">{results['max_drawdown_pct']:.1f}<span style="font-size:14px">%</span></div>
+                          </div>
+                          <div class="bt-stat">
+                            <div class="bt-stat-label">Sharpe Ratio</div>
+                            <div class="bt-stat-value">{results['sharpe']:.2f}</div>
+                          </div>
+                        </div>
+                        """, unsafe_allow_html=True)
 
                         # Equity curve
+                        eq_color = '#00C853' if pnl >= 0 else '#FF1744'
+                        eq_fill  = 'rgba(0,200,83,0.06)' if pnl >= 0 else 'rgba(255,23,68,0.06)'
                         eq_fig = go.Figure()
                         eq_fig.add_trace(go.Scatter(
                             y=results['equity_curve'],
                             mode='lines', name='Equity',
-                            line=dict(color='#4CAF50' if results['total_pnl'] > 0 else '#F44336', width=2),
-                            fill='tozeroy', fillcolor='rgba(76,175,80,0.1)'
+                            line=dict(color=eq_color, width=1.5),
+                            fill='tozeroy', fillcolor=eq_fill
                         ))
                         eq_fig.update_layout(
-                            title=f"Equity Curve — {bt_symbol} {bt_tf}",
-                            height=350, template='plotly_dark',
-                            xaxis_title="Trade #", yaxis_title="Equity ($)"
+                            height=300,
+                            template='plotly_dark',
+                            paper_bgcolor='#080C10',
+                            plot_bgcolor='#0C1117',
+                            font=dict(family='IBM Plex Mono', size=10, color='#4A6080'),
+                            title=dict(
+                                text=f"EQUITY CURVE  ·  {bt_symbol}  ·  {bt_tf}",
+                                font=dict(family='IBM Plex Mono', size=10, color='#2A5080'),
+                                x=0.01
+                            ),
+                            xaxis=dict(gridcolor='#0F1A28', showgrid=True, title="TRADE #",
+                                       title_font=dict(size=9, color='#2A4060')),
+                            yaxis=dict(gridcolor='#0F1A28', showgrid=True, title="EQUITY ($)",
+                                       title_font=dict(size=9, color='#2A4060')),
+                            margin=dict(l=50, r=20, t=40, b=40)
                         )
                         st.plotly_chart(eq_fig, use_container_width=True)
 
                         # Trade log
-                        with st.expander("📋 Trade Log"):
+                        with st.expander("TRADE LOG"):
                             trades_df = results['trades'].copy()
                             trades_df['entry_date'] = trades_df['entry_date'].dt.strftime('%Y-%m-%d %H:%M')
-                            trades_df['exit_date'] = trades_df['exit_date'].dt.strftime('%Y-%m-%d %H:%M')
-                            trades_df['pnl_pct'] = trades_df['pnl_pct'].apply(lambda x: f"{x:.2f}%")
-                            trades_df['pnl_dollar'] = trades_df['pnl_dollar'].apply(lambda x: f"${x:.0f}")
+                            trades_df['exit_date']  = trades_df['exit_date'].dt.strftime('%Y-%m-%d %H:%M')
+                            trades_df['pnl_pct']    = trades_df['pnl_pct'].apply(lambda x: f"{x:+.2f}%")
+                            trades_df['pnl_dollar']  = trades_df['pnl_dollar'].apply(lambda x: f"${x:+.0f}")
                             st.dataframe(
                                 trades_df[['entry_date', 'exit_date', 'direction', 'entry',
                                            'exit', 'pnl_pct', 'pnl_dollar', 'won', 'reason']],
                                 use_container_width=True
                             )
 
-                        st.caption(f"Data source: {source} | "
-                                   f"Risk per trade: {max_risk}% | ATR mult: {atr_multiplier}x | "
-                                   f"Bars analyzed: {len(df)}")
+                        st.markdown(
+                            f'<span class="data-tag">SOURCE · {source.upper()}</span>&nbsp;'
+                            f'<span class="data-tag">RISK · {max_risk}%</span>&nbsp;'
+                            f'<span class="data-tag">ATR MULT · {atr_multiplier}×</span>&nbsp;'
+                            f'<span class="data-tag">BARS · {len(df)}</span>',
+                            unsafe_allow_html=True
+                        )
 
 
 if __name__ == "__main__":
