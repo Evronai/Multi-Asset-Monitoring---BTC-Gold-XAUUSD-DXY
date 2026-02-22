@@ -538,6 +538,11 @@ class DataFetcher:
             df, src = _self._fetch_coingecko(symbol, interval)
             return df, src
         else:
+            # Forex/Gold: try Kraken first (has EUR/USD, GBP/USD, USD/JPY, XAU/USD)
+            # then fall back to yfinance
+            df, src = _self._fetch_kraken(symbol, interval, limit)
+            if df is not None and len(df) >= 20:
+                return df, src
             return _self._fetch_yfinance(symbol, interval, limit)
 
     def _fetch_kraken(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
@@ -547,10 +552,17 @@ class DataFetcher:
         """
         try:
             pair_map = {
+                # Crypto
                 "BTC/USDT": "XBTUSD", "ETH/USDT": "ETHUSD",
-                "BTC-USD": "XBTUSD", "ETH-USD": "ETHUSD"
+                "BTC-USD":  "XBTUSD", "ETH-USD":  "ETHUSD",
+                # Forex — Kraken trades these pairs natively
+                "EUR/USD": "EURUSD", "GBP/USD": "GBPUSD", "USD/JPY": "USDJPY",
+                # Gold — Kraken lists XAU/USD
+                "XAU/USD": "XAUUSD",
             }
-            pair = pair_map.get(symbol, "XBTUSD")
+            pair = pair_map.get(symbol)
+            if pair is None:
+                return None, f"Kraken: no mapping for {symbol}"
             tf_min = self.KRAKEN_TF_MAP.get(interval, 60)
 
             # since = earliest timestamp we want
@@ -582,7 +594,12 @@ class DataFetcher:
             df = df[["open", "high", "low", "close", "volume"]].astype(float)
             df = df[df["volume"] > 0].sort_index()
 
-            pair_display = pair.replace("XBTUSD", "BTC/USD").replace("ETHUSD", "ETH/USD")
+            display_map = {
+                "XBTUSD": "BTC/USD", "ETHUSD": "ETH/USD",
+                "EURUSD": "EUR/USD", "GBPUSD": "GBP/USD",
+                "USDJPY": "USD/JPY", "XAUUSD": "XAU/USD",
+            }
+            pair_display = display_map.get(pair, pair)
             return df, f"Kraken ({pair_display})"
 
         except Exception as e:
