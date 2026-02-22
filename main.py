@@ -73,10 +73,16 @@ st.markdown("""
         min-width: 260px !important;
         max-width: 300px !important;
     }
-    [data-testid="stSidebar"] * {
+    /* Target text elements only — never SVG/icons or they render as broken text */
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] .stMarkdown,
+    [data-testid="stSidebar"] .stCaption,
+    [data-testid="stSidebar"] small {
         font-family: 'IBM Plex Sans', sans-serif !important;
         color: var(--txt-body) !important;
     }
+    [data-testid="stSidebar"] svg { fill: var(--txt-muted) !important; color: unset !important; }
     [data-testid="stSidebar"] .stMarkdown h3 {
         font-family: 'IBM Plex Mono', monospace !important;
         color: var(--txt-muted) !important;
@@ -89,7 +95,6 @@ st.markdown("""
         margin: 20px 0 12px 0 !important;
     }
     [data-testid="stSidebar"] label {
-        color: var(--txt-muted) !important;
         font-size: 12px !important;
         font-weight: 500 !important;
     }
