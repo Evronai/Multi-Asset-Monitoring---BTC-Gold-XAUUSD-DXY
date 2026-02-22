@@ -30,19 +30,20 @@ st.markdown("""
     .main-header { font-size: 28px; font-weight: 700; color: #1A237E; margin-bottom: 10px; }
     .section-header { font-size: 18px; font-weight: 600; color: #37474F; margin: 20px 0 10px 0;
         padding-bottom: 8px; border-bottom: 2px solid #E3F2FD; }
-    .metric-card { background: white; border: 1px solid #E0E0E0; border-radius: 8px;
-        padding: 16px; margin: 8px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .metric-card { background: #1E1E2E; border: 1px solid #3A3A5C; border-radius: 8px;
+        padding: 16px; margin: 8px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.3); color: #E0E0E0; }
+    .metric-card strong { color: #FFFFFF; }
     .signal-buy { background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%); color: white;
         padding: 12px; border-radius: 6px; font-weight: 700; text-align: center; }
     .signal-sell { background: linear-gradient(135deg, #F44336 0%, #C62828 100%); color: white;
         padding: 12px; border-radius: 6px; font-weight: 700; text-align: center; }
     .signal-neutral { background: linear-gradient(135deg, #757575 0%, #424242 100%); color: white;
         padding: 12px; border-radius: 6px; font-weight: 700; text-align: center; }
-    .news-positive { background: #E8F5E9; color: #2E7D32; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
-    .news-negative { background: #FFEBEE; color: #C62828; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
-    .news-neutral { background: #F5F5F5; color: #616161; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
-    .data-tag { background: #E3F2FD; color: #1565C0; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
-    .warn-tag { background: #FFF3E0; color: #E65100; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
+    .news-positive { background: #1B5E20; color: #A5D6A7; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
+    .news-negative { background: #B71C1C; color: #FFCDD2; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
+    .news-neutral  { background: #37474F; color: #CFD8DC; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
+    .data-tag { background: #0D47A1; color: #BBDEFB; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
+    .warn-tag { background: #E65100; color: #FFE0B2; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -279,7 +280,10 @@ class DataFetcher:
             df = pd.DataFrame(values)
             df["datetime"] = pd.to_datetime(df["datetime"])
             df.set_index("datetime", inplace=True)
-            df = df[["open", "high", "low", "close", "volume"]].astype(float)
+            # Forex/commodities have no centralized volume — select only available cols
+            cols = ["open", "high", "low", "close"]
+            df = df[cols].astype(float)
+            df["volume"] = 0.0  # placeholder; vol_ratio logic handles zero gracefully
             df = df.sort_index()
 
             return df, f"Twelve Data ({symbol})"
@@ -818,15 +822,18 @@ class MultiTimeframeAnalyzer:
             votes.append(0)
             reasons.append(f"⚪ ADX {adx:.1f} weak trend")
 
-        # 8. Volume confirmation
-        if vol_ratio > 1.3:
-            votes.append(1)
-            reasons.append(f"✅ Above-average volume ({vol_ratio:.1f}x)")
-        elif vol_ratio < 0.7:
-            votes.append(-1)
-            reasons.append(f"⚠️ Low volume ({vol_ratio:.1f}x) — weak move")
+        # 8. Volume confirmation (skip if no real volume data)
+        if vol_ratio > 0 and vol_ratio != 1.0:
+            if vol_ratio > 1.3:
+                votes.append(1)
+                reasons.append(f"✅ Above-average volume ({vol_ratio:.1f}x)")
+            elif vol_ratio < 0.7:
+                votes.append(-1)
+                reasons.append(f"⚠️ Low volume ({vol_ratio:.1f}x) — weak move")
+            else:
+                votes.append(0)
         else:
-            votes.append(0)
+            reasons.append("⚪ Volume N/A (forex/commodity — no centralized volume)")
 
         # 9. Bollinger Bands position
         if price > bb_upper:
@@ -1666,14 +1673,14 @@ def main():
                 st.markdown(f"""
                 <div class="metric-card">
                     <div style="display:flex; justify-content:space-between; align-items:start;">
-                        <strong style="flex:1">{a['title']}</strong>
-                        <span class="{sent_class}" style="margin-left:10px">{a['sentiment'].upper()}</span>
+                        <strong style="flex:1; color:#FFFFFF">{a['title']}</strong>
+                        <span class="{sent_class}" style="margin-left:10px; white-space:nowrap">{a['sentiment'].upper()}</span>
                     </div>
-                    <div style="color:#555; font-size:0.9em; margin:6px 0">{a['description']}</div>
-                    <div style="height:4px; background:#eee; border-radius:2px; margin:4px 0">
+                    <div style="color:#B0BEC5; font-size:0.9em; margin:6px 0">{a['description']}</div>
+                    <div style="height:4px; background:#2A2A3E; border-radius:2px; margin:4px 0">
                         <div style="height:4px; width:{bar_width}%; background:{bar_color}; border-radius:2px"></div>
                     </div>
-                    <div style="display:flex; justify-content:space-between; font-size:0.8em; color:#999">
+                    <div style="display:flex; justify-content:space-between; font-size:0.8em; color:#78909C">
                         <span>{a['source']}</span>
                         <span>VADER: {compound:.3f} | {a['published']}</span>
                     </div>
