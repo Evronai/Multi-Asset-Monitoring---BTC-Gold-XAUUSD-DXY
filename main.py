@@ -62,7 +62,7 @@ with st.sidebar:
                                    help="Free tier: 800 calls/day. Get at twelvedata.com")
         st.markdown("**NewsData.io** (Optional)")
         news_api_key = st.text_input("NewsData Key", type="password", key="news_api_key")
-        st.caption("⚠️ Crypto uses Coinbase → CoinGecko (free, no key). Forex/Gold requires Twelve Data key.")
+        st.caption("Crypto: Kraken → Coinbase → CoinGecko (all free, no key). Forex/Gold: Twelve Data key required.")
 
     st.markdown("### 📊 INSTRUMENTS")
     instruments = st.multiselect(
@@ -108,6 +108,12 @@ class DataFetcher:
     - Forex/Gold: Twelve Data API (free tier, key required)
     """
 
+    # Kraken interval in minutes
+    KRAKEN_TF_MAP = {
+        "1m": 1, "5m": 5, "15m": 15, "30m": 30,
+        "1h": 60, "4h": 240, "1day": 1440, "1week": 10080
+    }
+
     # Coinbase granularity in seconds
     COINBASE_TF_MAP = {
         "1m": 60, "5m": 300, "15m": 900, "30m": 1800,
@@ -119,12 +125,6 @@ class DataFetcher:
         "1h": "1h", "4h": "4h", "1day": "1day", "1week": "1week"
     }
 
-    # CoinGecko days per timeframe
-    COINGECKO_DAYS = {
-        "1m": 1, "5m": 3, "15m": 7, "30m": 14,
-        "1h": 30, "4h": 90, "1day": 365, "1week": 365
-    }
-
     def __init__(self, twelve_api_key: str = ""):
         self.twelve_key = twelve_api_key
 
@@ -132,31 +132,73 @@ class DataFetcher:
     def fetch(_self, symbol: str, interval: str, limit: int = 500) -> Tuple[Optional[pd.DataFrame], str]:
         """
         Returns (DataFrame, source_label).
-        DataFrame always has: open, high, low, close, volume with DatetimeIndex.
-        Crypto: tries Coinbase → CoinGecko fallback.
+        Crypto: Kraken (primary) → Coinbase → CoinGecko (last resort).
         Forex/Gold: Twelve Data.
         """
         is_crypto = symbol in ["BTC/USDT", "ETH/USDT", "BTC-USD", "ETH-USD"]
 
         if is_crypto:
-            # Try Coinbase first
+            df, src = _self._fetch_kraken(symbol, interval, limit)
+            if df is not None and len(df) >= 20:
+                return df, src
             df, src = _self._fetch_coinbase(symbol, interval, limit)
             if df is not None and len(df) >= 20:
                 return df, src
-            # Fallback to CoinGecko (OHLC endpoint)
-            df, src = _self._fetch_coingecko(symbol, interval, limit)
+            df, src = _self._fetch_coingecko(symbol, interval)
             return df, src
         else:
             return _self._fetch_twelve_data(symbol, interval, limit)
 
-    def _fetch_coinbase(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
+    def _fetch_kraken(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
         """
-        Fetch OHLCV from Coinbase Advanced Trade public API.
-        No API key required. Not geo-blocked like Binance.
-        Max 300 candles per request.
+        Kraken REST API — free, no key, generous rate limits, real OHLCV.
+        Returns up to 720 candles per call.
         """
         try:
-            # Map symbol to Coinbase product ID
+            pair_map = {
+                "BTC/USDT": "XBTUSD", "ETH/USDT": "ETHUSD",
+                "BTC-USD": "XBTUSD", "ETH-USD": "ETHUSD"
+            }
+            pair = pair_map.get(symbol, "XBTUSD")
+            tf_min = self.KRAKEN_TF_MAP.get(interval, 60)
+
+            # since = earliest timestamp we want
+            since = int((datetime.utcnow() - timedelta(minutes=tf_min * min(limit, 720))).timestamp())
+
+            url = "https://api.kraken.com/0/public/OHLC"
+            params = {"pair": pair, "interval": tf_min, "since": since}
+
+            resp = requests.get(url, params=params, timeout=15,
+                                headers={"User-Agent": "Mozilla/5.0"})
+            resp.raise_for_status()
+            data = resp.json()
+
+            if data.get("error"):
+                return None, f"Kraken: {data['error']}"
+
+            result = data.get("result", {})
+            # Kraken returns {pair_name: [[time,o,h,l,c,vwap,vol,count]], "last": ...}
+            ohlc_key = [k for k in result if k != "last"]
+            if not ohlc_key:
+                return None, "Kraken: no OHLC key in response"
+
+            raw = result[ohlc_key[0]]
+            df = pd.DataFrame(raw, columns=[
+                "timestamp", "open", "high", "low", "close", "vwap", "volume", "count"
+            ])
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", utc=True)
+            df.set_index("timestamp", inplace=True)
+            df = df[["open", "high", "low", "close", "volume"]].astype(float)
+            df = df[df["volume"] > 0].sort_index()
+
+            return df, f"Kraken ({pair})"
+
+        except Exception as e:
+            return None, f"Kraken error: {e}"
+
+    def _fetch_coinbase(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
+        """Coinbase Exchange public API — free, no key."""
+        try:
             sym_map = {
                 "BTC/USDT": "BTC-USD", "ETH/USDT": "ETH-USD",
                 "BTC-USD": "BTC-USD", "ETH-USD": "ETH-USD"
@@ -164,7 +206,6 @@ class DataFetcher:
             product_id = sym_map.get(symbol, symbol)
             granularity = self.COINBASE_TF_MAP.get(interval, 3600)
 
-            # Coinbase allows max 300 candles, paginate if needed
             end_time = int(datetime.utcnow().timestamp())
             start_time = end_time - granularity * min(limit, 300)
 
@@ -181,41 +222,45 @@ class DataFetcher:
             raw = resp.json()
 
             if not raw or isinstance(raw, dict):
-                return None, f"Coinbase: unexpected response"
+                return None, "Coinbase: unexpected response"
 
-            # Coinbase returns [timestamp, low, high, open, close, volume]
+            # [timestamp, low, high, open, close, volume]
             df = pd.DataFrame(raw, columns=["timestamp", "low", "high", "open", "close", "volume"])
             df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", utc=True)
             df.set_index("timestamp", inplace=True)
             df = df[["open", "high", "low", "close", "volume"]].astype(float)
-            df = df.sort_index()
-            df = df[df["volume"] > 0]
+            df = df[df["volume"] > 0].sort_index()
 
             return df, f"Coinbase ({product_id})"
 
         except Exception as e:
             return None, f"Coinbase error: {e}"
 
-    def _fetch_coingecko(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
+    def _fetch_coingecko(self, symbol: str, interval: str) -> Tuple[Optional[pd.DataFrame], str]:
         """
-        CoinGecko OHLC endpoint — returns REAL OHLC (not reconstructed).
-        Free, no API key. Fallback when Coinbase fails.
-        Note: CoinGecko OHLC granularity is fixed by the 'days' param:
-          1-2 days → 30min candles, 3-89 days → 4h candles, 90+ days → 4day candles
+        CoinGecko — last resort only. Real OHLC but rate-limited (30 calls/min free tier).
+        Granularity is auto-selected by CoinGecko based on days requested.
         """
         try:
             coin_map = {
                 "BTC/USDT": "bitcoin", "ETH/USDT": "ethereum",
                 "BTC-USD": "bitcoin", "ETH-USD": "ethereum"
             }
+            # Use minimal days to avoid rate limits and get finer granularity
+            days_map = {
+                "1m": 1, "5m": 2, "15m": 7, "30m": 14,
+                "1h": 30, "4h": 30, "1day": 90, "1week": 90
+            }
             coin_id = coin_map.get(symbol, "bitcoin")
-            days = self.COINGECKO_DAYS.get(interval, 30)
+            days = days_map.get(interval, 30)
 
             url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc"
-            params = {"vs_currency": "usd", "days": days}
+            resp = requests.get(url, params={"vs_currency": "usd", "days": days},
+                                timeout=15, headers={"User-Agent": "Mozilla/5.0"})
 
-            resp = requests.get(url, params=params, timeout=15,
-                                headers={"User-Agent": "Mozilla/5.0"})
+            if resp.status_code == 429:
+                return None, "CoinGecko rate-limited (429) — all sources exhausted"
+
             resp.raise_for_status()
             raw = resp.json()
 
@@ -226,27 +271,10 @@ class DataFetcher:
             df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
             df.set_index("timestamp", inplace=True)
             df = df.astype(float)
-            df["volume"] = 0.0  # CoinGecko OHLC has no volume; use market_chart for vol if needed
+            df["volume"] = 0.0
             df = df.sort_index()
 
-            # Merge in volume from market_chart endpoint
-            try:
-                vol_url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
-                vol_resp = requests.get(vol_url,
-                                        params={"vs_currency": "usd", "days": days},
-                                        timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-                vol_data = vol_resp.json().get("total_volumes", [])
-                vol_df = pd.DataFrame(vol_data, columns=["timestamp", "volume"])
-                vol_df["timestamp"] = pd.to_datetime(vol_df["timestamp"], unit="ms", utc=True)
-                vol_df.set_index("timestamp", inplace=True)
-                # Resample volume to match OHLC frequency
-                freq = df.index.to_series().diff().median()
-                vol_resampled = vol_df["volume"].resample(freq).sum()
-                df["volume"] = vol_resampled.reindex(df.index, method="nearest").fillna(0)
-            except Exception:
-                pass  # volume stays 0, non-fatal
-
-            return df, f"CoinGecko ({coin_id}, {days}d)"
+            return df, f"CoinGecko ({coin_id}, {days}d — volume unavailable)"
 
         except Exception as e:
             return None, f"CoinGecko error: {e}"
