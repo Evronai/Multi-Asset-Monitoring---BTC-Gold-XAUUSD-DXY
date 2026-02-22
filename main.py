@@ -1812,12 +1812,17 @@ def build_chart(df: pd.DataFrame, symbol: str, tf: str, result: Dict) -> go.Figu
         subplot_titles=[f"{symbol} {tf}", "Volume", "RSI", "MACD"]
     )
 
-    # Candlesticks
+    # Candlesticks — bright fills + thick wicks for visibility
     fig.add_trace(go.Candlestick(
         x=df.index, open=df['open'], high=df['high'],
         low=df['low'], close=df['close'],
         name="Price", showlegend=False,
-        increasing_line_color='#26a69a', decreasing_line_color='#ef5350'
+        increasing_line_color='#00E676',   # bright green wick
+        increasing_fillcolor='#00C853',    # solid green body
+        decreasing_line_color='#FF5252',   # bright red wick
+        decreasing_fillcolor='#D50000',    # solid red body
+        line=dict(width=1),
+        whiskerwidth=1,
     ), row=1, col=1)
 
     # EMAs
@@ -1827,7 +1832,7 @@ def build_chart(df: pd.DataFrame, symbol: str, tf: str, result: Dict) -> go.Figu
         ema = ind.ema(df['close'], period)
         fig.add_trace(go.Scatter(
             x=df.index, y=ema,
-            line=dict(color=color, width=1, dash='solid'),
+            line=dict(color=color, width=0.8, dash='solid'), opacity=0.8,
             name=f"EMA {period}", showlegend=True
         ), row=1, col=1)
 
@@ -1845,8 +1850,8 @@ def build_chart(df: pd.DataFrame, symbol: str, tf: str, result: Dict) -> go.Figu
 
     # Order blocks
     for ob in result.get('order_blocks', [])[-5:]:
-        color = 'rgba(76,175,80,0.2)' if ob['type'] == 'BULLISH_OB' else 'rgba(244,67,54,0.2)'
-        border = 'rgba(76,175,80,0.8)' if ob['type'] == 'BULLISH_OB' else 'rgba(244,67,54,0.8)'
+        color = 'rgba(76,175,80,0.08)' if ob['type'] == 'BULLISH_OB' else 'rgba(244,67,54,0.08)'
+        border = 'rgba(76,175,80,0.5)' if ob['type'] == 'BULLISH_OB' else 'rgba(244,67,54,0.5)'
         fig.add_hrect(y0=ob['bottom'], y1=ob['top'],
                       fillcolor=color, line_color=border, line_width=1,
                       annotation_text=ob['type'].replace('_OB', ' OB'),
