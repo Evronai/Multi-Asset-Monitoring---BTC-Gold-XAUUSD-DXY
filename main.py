@@ -2160,6 +2160,15 @@ def main():
             st.warning("Select instruments in the sidebar.")
             return
 
+        # Debug: show what key is stored (remove after fix confirmed)
+        _av_debug = st.session_state.get("cfg_av_key", "")
+        if "XAU/USD" in instruments:
+            if _av_debug:
+                st.success(f"✓ Alpha Vantage key loaded: {_av_debug[:4]}{'*' * (len(_av_debug)-4)}")
+            else:
+                st.error("✗ cfg_av_key is EMPTY — key not reaching session_state")
+                st.write("All session_state keys:", [k for k in st.session_state.keys()])
+
         for symbol in instruments:
             with st.expander(f"  {symbol}  ·  MARKET ANALYSIS", expanded=True):
                 data = {}
