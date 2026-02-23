@@ -790,54 +790,91 @@ class DataFetcher:
 
 
     def _fetch_alpha_vantage_gold(self, interval: str, api_key: str) -> Tuple[Optional[pd.DataFrame], str]:
-        """Alpha Vantage — XAU/USD gold OHLCV. Free tier: 25 calls/day."""
+        """
+        Alpha Vantage XAU/USD — free tier uses:
+          - GOLD_HISTORY (daily OHLCV, free) for 4h/1day
+          - FX_DAILY (daily OHLCV, free) for all intraday intervals
+            (FX_INTRADAY is premium-only, so we use daily for everything)
+        """
         try:
-            if interval in ("1m", "5m", "15m", "30m", "1h"):
-                av_int = {"1m": "1min", "5m": "5min", "15m": "15min",
-                          "30m": "30min", "1h": "60min"}.get(interval, "60min")
-                params = {
-                    "function": "FX_INTRADAY", "from_symbol": "XAU",
-                    "to_symbol": "USD", "interval": av_int,
-                    "outputsize": "full", "apikey": api_key,
-                }
-                time_key = f"Time Series FX ({av_int})"
-            else:
-                params = {
-                    "function": "FX_DAILY", "from_symbol": "XAU",
-                    "to_symbol": "USD", "outputsize": "full", "apikey": api_key,
-                }
-                time_key = "Time Series FX (Daily)"
-
+            # Try the dedicated Gold history endpoint first (free, OHLCV)
+            params = {
+                "function":  "GOLD_HISTORY",
+                "apikey":    api_key,
+                "datatype":  "json",
+            }
             resp = requests.get("https://www.alphavantage.co/query",
                                 params=params, timeout=20)
             resp.raise_for_status()
             data = resp.json()
 
+            # Check for errors / premium gate
             if "Note" in data:
-                return None, "Alpha Vantage rate limited (25 calls/day free tier)"
+                return None, "Alpha Vantage rate limited (25 calls/day on free tier)"
             if "Information" in data:
-                return None, f"Alpha Vantage: {data['Information'][:80]}"
+                return None, f"Alpha Vantage: {data['Information'][:120]}"
             if "Error Message" in data:
-                return None, f"Alpha Vantage: {data['Error Message'][:80]}"
-            if time_key not in data:
-                return None, f"Alpha Vantage unexpected response: {list(data.keys())}"
+                return None, f"Alpha Vantage: {data['Error Message'][:120]}"
+
+            # GOLD_HISTORY returns {"data": [{"date":..,"open":..,"high":..,"low":..,"close":..}, ...]}
+            if "data" in data:
+                rows = []
+                for item in data["data"]:
+                    try:
+                        rows.append({
+                            "timestamp": pd.to_datetime(item["date"], utc=True),
+                            "open":      float(item.get("open",  item.get("price", 0))),
+                            "high":      float(item.get("high",  item.get("price", 0))),
+                            "low":       float(item.get("low",   item.get("price", 0))),
+                            "close":     float(item.get("close", item.get("price", 0))),
+                            "volume":    0.0,
+                        })
+                    except (KeyError, ValueError):
+                        continue
+                if rows:
+                    df = pd.DataFrame(rows).set_index("timestamp").sort_index()
+                    df = df[df["close"] > 0].tail(500)
+                    if len(df) >= 5:
+                        return df, "Alpha Vantage GOLD_HISTORY (daily)"
+
+            # Fallback: FX_DAILY for XAU/USD (free tier)
+            params2 = {
+                "function":    "FX_DAILY",
+                "from_symbol": "XAU",
+                "to_symbol":   "USD",
+                "outputsize":  "compact",
+                "apikey":      api_key,
+            }
+            resp2 = requests.get("https://www.alphavantage.co/query",
+                                 params=params2, timeout=20)
+            resp2.raise_for_status()
+            data2 = resp2.json()
+
+            if "Note" in data2:
+                return None, "Alpha Vantage rate limited"
+            if "Information" in data2:
+                return None, f"Alpha Vantage premium required: {data2['Information'][:80]}"
+
+            time_key = "Time Series FX (Daily)"
+            if time_key not in data2:
+                return None, f"Alpha Vantage no data — keys: {list(data2.keys())}"
 
             rows = []
-            for dt_str, v in data[time_key].items():
+            for dt_str, v in data2[time_key].items():
                 rows.append({
                     "timestamp": pd.to_datetime(dt_str, utc=True),
-                    "open":  float(v["1. open"]),
-                    "high":  float(v["2. high"]),
-                    "low":   float(v["3. low"]),
-                    "close": float(v["4. close"]),
-                    "volume": 0.0,
+                    "open":      float(v["1. open"]),
+                    "high":      float(v["2. high"]),
+                    "low":       float(v["3. low"]),
+                    "close":     float(v["4. close"]),
+                    "volume":    0.0,
                 })
 
             df = pd.DataFrame(rows).set_index("timestamp").sort_index()
             df = df[df["close"] > 0].tail(500)
             if len(df) < 5:
-                return None, "Alpha Vantage: insufficient data returned"
-            return df, "Alpha Vantage (XAU/USD)"
+                return None, "Alpha Vantage: insufficient XAU/USD data"
+            return df, "Alpha Vantage FX_DAILY (XAU/USD)"
 
         except Exception as e:
             return None, f"Alpha Vantage error: {e}"
@@ -2151,7 +2188,7 @@ def main():
                         if df is not None and len(df) >= 50:
                             data[tf] = (df, source)
                         else:
-                            st.caption(f"⚠ {symbol} {tf}: {source}")
+                            st.warning(f"⚠ {symbol} {tf}: {source}")
 
                 if not data:
                     st.error(f"No data available for {symbol}")
