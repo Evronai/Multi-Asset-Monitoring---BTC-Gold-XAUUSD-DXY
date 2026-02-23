@@ -1967,33 +1967,69 @@ def main():
     fetcher = DataFetcher()
     sentiment_engine = SentimentEngine(api_key=news_key)
 
-    tab1, tab2, tab3, tab4 = st.tabs(["  SIGNALS  ", "  CHARTS  ", "  NEWS  ", "  BACKTEST  "])
+    tab0, tab1, tab2, tab3, tab4 = st.tabs(["  ⚙ SETTINGS  ", "  SIGNALS  ", "  CHARTS  ", "  NEWS  ", "  BACKTEST  "])
+
+    # ========== TAB 0: SETTINGS (mobile-first) ==========
+    with tab0:
+        st.markdown('<div class="section-label">Configuration</div>', unsafe_allow_html=True)
+        st.caption("All settings sync with the sidebar automatically.")
+
+        with st.expander("── INSTRUMENTS ──", expanded=True):
+            instruments = st.multiselect(
+                "Markets",
+                ["BTC/USDT", "ETH/USDT", "EUR/USD", "GBP/USD", "USD/JPY"],
+                default=st.session_state.get("instruments", ["BTC/USDT", "ETH/USDT"]),
+                key="instruments_tab"
+            )
+            if instruments != st.session_state.get("instruments", ["BTC/USDT", "ETH/USDT"]):
+                st.session_state["instruments"] = instruments
+
+        with st.expander("── TIMEFRAMES ──", expanded=True):
+            timeframes = st.multiselect(
+                "Frames",
+                ["15m", "1h", "4h", "1day"],
+                default=st.session_state.get("timeframes", ["15m", "1h", "4h", "1day"]),
+                key="timeframes_tab"
+            )
+            if timeframes != st.session_state.get("timeframes", ["15m", "1h", "4h", "1day"]):
+                st.session_state["timeframes"] = timeframes
+
+        with st.expander("── SIGNAL PARAMS ──", expanded=True):
+            min_confidence = st.slider("Min Confidence %", 0, 100,
+                st.session_state.get("min_confidence", 60), key="min_confidence_tab")
+            if min_confidence != st.session_state.get("min_confidence", 60):
+                st.session_state["min_confidence"] = min_confidence
+            require_htf = st.checkbox("Require HTF Confirmation",
+                value=st.session_state.get("require_htf", True), key="require_htf_tab")
+            if require_htf != st.session_state.get("require_htf", True):
+                st.session_state["require_htf"] = require_htf
+
+        with st.expander("── RISK MANAGEMENT ──", expanded=True):
+            max_risk = st.slider("Max Risk per Trade %", 0.1, 5.0,
+                st.session_state.get("max_risk", 1.0), 0.1, key="max_risk_tab")
+            if max_risk != st.session_state.get("max_risk", 1.0):
+                st.session_state["max_risk"] = max_risk
+            atr_multiplier = st.slider("ATR Stop Multiplier", 1.0, 5.0,
+                st.session_state.get("atr_multiplier", 2.0), 0.1, key="atr_multiplier_tab")
+            if atr_multiplier != st.session_state.get("atr_multiplier", 2.0):
+                st.session_state["atr_multiplier"] = atr_multiplier
+
+        with st.expander("── API KEYS ──", expanded=False):
+            st.markdown("**NEWSDATA.IO** · Optional — enhances news tab")
+            news_api_key_tab = st.text_input("NewsData Key", type="password", key="news_api_key_tab")
+            if news_api_key_tab:
+                st.session_state["news_api_key"] = news_api_key_tab
+            st.caption("All market data is free — no keys required.")
+
+        st.divider()
+        if st.button("◈  APPLY & REFRESH", type="primary", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
 
     # ========== TAB 1: SIGNALS ==========
     with tab1:
         st.markdown('<div class="section-label">Live Multi-Timeframe Signal Matrix</div>', unsafe_allow_html=True)
-        st.markdown("""
-        <div class="mobile-settings-hint">
-            &#9776;&nbsp; Tap the <strong>blue button</strong> top-left to open Settings
-        </div>
-        <script>
-        // Auto-click to open sidebar on mobile if it's collapsed
-        (function() {
-            var mq = window.matchMedia('(max-width: 768px)');
-            if (mq.matches) {
-                setTimeout(function() {
-                    var btn = document.querySelector('[data-testid="stSidebarCollapsedControl"] button');
-                    if (btn) {
-                        var sidebar = document.querySelector('[data-testid="stSidebar"]');
-                        if (sidebar && sidebar.getAttribute('aria-expanded') === 'false') {
-                            btn.click();
-                        }
-                    }
-                }, 800);
-            }
-        })();
-        </script>
-        """, unsafe_allow_html=True)
+
 
         if not instruments:
             st.warning("Select instruments in the sidebar.")
