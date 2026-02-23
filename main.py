@@ -470,36 +470,7 @@ st.markdown(f"""
 # ==================================================
 with st.sidebar:
     st.markdown("### ── CONFIG ──")
-
-    with st.expander("API KEYS", expanded=False):
-        st.markdown("**NEWSDATA.IO** · Optional — enhances news tab")
-        st.text_input("NewsData Key", type="password", key="news_api_key")
-        st.caption("All market data is free — no keys required.")
-
-    st.markdown("### ── INSTRUMENTS ──")
-    st.multiselect(
-        "Markets",
-        ["BTC/USDT", "ETH/USDT", "EUR/USD", "GBP/USD", "USD/JPY"],
-        default=["BTC/USDT", "ETH/USDT"],
-        key="instruments"
-    )
-
-    st.markdown("### ── TIMEFRAMES ──")
-    st.multiselect(
-        "Frames",
-        ["15m", "1h", "4h", "1day"],
-        default=["15m", "1h", "4h", "1day"],
-        key="timeframes"
-    )
-
-    st.markdown("### ── SIGNAL PARAMS ──")
-    st.slider("Min Confidence %", 0, 100, 60, key="min_confidence")
-    st.checkbox("Require HTF Confirmation", value=True, key="require_htf")
-
-    st.markdown("### ── RISK MGMT ──")
-    st.slider("Max Risk per Trade %", 0.1, 5.0, 1.0, 0.1, key="max_risk")
-    st.slider("ATR Stop Multiplier", 1.0, 5.0, 2.0, 0.1, key="atr_multiplier")
-
+    st.caption("Settings are in the **⚙ SETTINGS** tab.")
     st.divider()
     run_btn = st.button("◈  REFRESH ANALYSIS", type="primary", use_container_width=True)
     if run_btn:
@@ -1955,13 +1926,13 @@ def build_chart(df: pd.DataFrame, symbol: str, tf: str, result: Dict) -> go.Figu
 # ==================================================
 
 def main():
-    news_key = st.session_state.get("news_api_key", "")
-    instruments = st.session_state.get("instruments", ["BTC/USDT", "ETH/USDT"])
-    timeframes = st.session_state.get("timeframes", ["15m", "1h", "4h", "1day"])
-    min_confidence = st.session_state.get("min_confidence", 60)
-    require_htf = st.session_state.get("require_htf", True)
-    max_risk = st.session_state.get("max_risk", 1.0)
-    atr_multiplier = st.session_state.get("atr_multiplier", 2.0)
+    news_key = st.session_state.get("cfg_news_api_key", "")
+    instruments    = st.session_state.get("cfg_instruments",    ["BTC/USDT", "ETH/USDT"])
+    timeframes     = st.session_state.get("cfg_timeframes",     ["15m", "1h", "4h", "1day"])
+    min_confidence = st.session_state.get("cfg_min_confidence", 60)
+    require_htf    = st.session_state.get("cfg_require_htf",    True)
+    max_risk       = st.session_state.get("cfg_max_risk",       1.0)
+    atr_multiplier = st.session_state.get("cfg_atr_multiplier", 2.0)
 
     fetcher = DataFetcher()
     sentiment_engine = SentimentEngine(api_key=news_key)
@@ -1972,13 +1943,13 @@ def main():
     with tab0:
         st.markdown('<div class="section-label">Configuration</div>', unsafe_allow_html=True)
 
-        # Read current values from session state (set by sidebar widgets)
-        cur_instruments  = st.session_state.get("instruments",   ["BTC/USDT", "ETH/USDT"])
-        cur_timeframes   = st.session_state.get("timeframes",    ["15m", "1h", "4h", "1day"])
-        cur_confidence   = st.session_state.get("min_confidence", 60)
-        cur_htf          = st.session_state.get("require_htf",   True)
-        cur_risk         = st.session_state.get("max_risk",       1.0)
-        cur_atr          = st.session_state.get("atr_multiplier", 2.0)
+        # Read current values from cfg_ keys (set by Apply button)
+        cur_instruments  = st.session_state.get("cfg_instruments",    ["BTC/USDT", "ETH/USDT"])
+        cur_timeframes   = st.session_state.get("cfg_timeframes",     ["15m", "1h", "4h", "1day"])
+        cur_confidence   = st.session_state.get("cfg_min_confidence", 60)
+        cur_htf          = st.session_state.get("cfg_require_htf",    True)
+        cur_risk         = st.session_state.get("cfg_max_risk",       1.0)
+        cur_atr          = st.session_state.get("cfg_atr_multiplier", 2.0)
 
         # Show current config as readable summary cards
         st.markdown(f"""
@@ -2020,14 +1991,15 @@ def main():
 
         st.divider()
         if st.button("◈  APPLY & RUN ANALYSIS", type="primary", use_container_width=True, key="apply_mobile"):
-            st.session_state["instruments"]   = new_instruments
-            st.session_state["timeframes"]    = new_timeframes
-            st.session_state["min_confidence"] = new_confidence
-            st.session_state["require_htf"]   = new_htf
-            st.session_state["max_risk"]      = new_risk
-            st.session_state["atr_multiplier"] = new_atr
+            # Write to unbound keys (cfg_ prefix) — not bound to any widget
+            st.session_state["cfg_instruments"]    = new_instruments
+            st.session_state["cfg_timeframes"]     = new_timeframes
+            st.session_state["cfg_min_confidence"] = new_confidence
+            st.session_state["cfg_require_htf"]    = new_htf
+            st.session_state["cfg_max_risk"]       = new_risk
+            st.session_state["cfg_atr_multiplier"] = new_atr
             if new_news:
-                st.session_state["news_api_key"] = new_news
+                st.session_state["cfg_news_api_key"] = new_news
             st.cache_data.clear()
             st.rerun()
 
