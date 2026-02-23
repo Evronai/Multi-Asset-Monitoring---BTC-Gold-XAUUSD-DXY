@@ -1373,7 +1373,9 @@ class MultiTimeframeAnalyzer:
 
         # 10. Smart Money patterns — only vote if price is NEAR the OB (within 2% of midpoint)
         def near_ob(ob, current_price, threshold=0.02):
-            mid = (ob['high'] + ob['low']) / 2
+            mid = ob.get('midpoint', (ob.get('top', 0) + ob.get('bottom', 0)) / 2)
+            if mid == 0:
+                return False
             return abs(current_price - mid) / mid < threshold
 
         relevant_bull_ob = any(
