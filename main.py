@@ -790,71 +790,53 @@ class DataFetcher:
 
 
     def _fetch_alpha_vantage_gold(self, interval: str, api_key: str) -> Tuple[Optional[pd.DataFrame], str]:
-        """
-        Alpha Vantage — XAU/USD (gold) OHLCV.
-        Free tier: 25 calls/day. Supports intraday + daily.
-        """
+        """Alpha Vantage — XAU/USD gold OHLCV. Free tier: 25 calls/day."""
         try:
-            # Map our intervals to Alpha Vantage function + interval params
             if interval in ("1m", "5m", "15m", "30m", "1h"):
-                av_interval_map = {"1m": "1min", "5m": "5min", "15m": "15min",
-                                   "30m": "30min", "1h": "60min"}
-                av_interval = av_interval_map.get(interval, "60min")
-                function = "FX_INTRADAY"
+                av_int = {"1m": "1min", "5m": "5min", "15m": "15min",
+                          "30m": "30min", "1h": "60min"}.get(interval, "60min")
                 params = {
-                    "function":    function,
-                    "from_symbol": "XAU",
-                    "to_symbol":   "USD",
-                    "interval":    av_interval,
-                    "outputsize":  "full",
-                    "apikey":      api_key,
-                    "datatype":    "json",
+                    "function": "FX_INTRADAY", "from_symbol": "XAU",
+                    "to_symbol": "USD", "interval": av_int,
+                    "outputsize": "full", "apikey": api_key,
                 }
-                time_key = f"Time Series FX ({av_interval})"
+                time_key = f"Time Series FX ({av_int})"
             else:
-                # 4h and 1day → use daily (AV has no 4h FX endpoint)
-                function = "FX_DAILY"
                 params = {
-                    "function":    function,
-                    "from_symbol": "XAU",
-                    "to_symbol":   "USD",
-                    "outputsize":  "full",
-                    "apikey":      api_key,
-                    "datatype":    "json",
+                    "function": "FX_DAILY", "from_symbol": "XAU",
+                    "to_symbol": "USD", "outputsize": "full", "apikey": api_key,
                 }
                 time_key = "Time Series FX (Daily)"
 
-            url = "https://www.alphavantage.co/query"
-            resp = requests.get(url, params=params, timeout=20)
+            resp = requests.get("https://www.alphavantage.co/query",
+                                params=params, timeout=20)
             resp.raise_for_status()
             data = resp.json()
 
-            # Detect API errors / rate limit
             if "Note" in data:
-                return None, "Alpha Vantage rate limited — max 25 calls/day on free tier"
+                return None, "Alpha Vantage rate limited (25 calls/day free tier)"
+            if "Information" in data:
+                return None, f"Alpha Vantage: {data['Information'][:80]}"
             if "Error Message" in data:
-                return None, f"Alpha Vantage error: {data['Error Message']}"
+                return None, f"Alpha Vantage: {data['Error Message'][:80]}"
             if time_key not in data:
-                return None, f"Alpha Vantage: unexpected response keys: {list(data.keys())}"
+                return None, f"Alpha Vantage unexpected response: {list(data.keys())}"
 
-            ts = data[time_key]
             rows = []
-            for dt_str, vals in ts.items():
+            for dt_str, v in data[time_key].items():
                 rows.append({
                     "timestamp": pd.to_datetime(dt_str, utc=True),
-                    "open":      float(vals["1. open"]),
-                    "high":      float(vals["2. high"]),
-                    "low":       float(vals["3. low"]),
-                    "close":     float(vals["4. close"]),
-                    "volume":    0.0,  # AV FX endpoints don't provide volume
+                    "open":  float(v["1. open"]),
+                    "high":  float(v["2. high"]),
+                    "low":   float(v["3. low"]),
+                    "close": float(v["4. close"]),
+                    "volume": 0.0,
                 })
 
             df = pd.DataFrame(rows).set_index("timestamp").sort_index()
-            df = df[df["close"] > 0]
-
+            df = df[df["close"] > 0].tail(500)
             if len(df) < 5:
-                return None, "Alpha Vantage: insufficient XAU/USD data"
-
+                return None, "Alpha Vantage: insufficient data returned"
             return df, "Alpha Vantage (XAU/USD)"
 
         except Exception as e:
@@ -2159,15 +2141,6 @@ def main():
         if not instruments:
             st.warning("Select instruments in the sidebar.")
             return
-
-        # Debug: show what key is stored (remove after fix confirmed)
-        _av_debug = st.session_state.get("cfg_av_key", "")
-        if "XAU/USD" in instruments:
-            if _av_debug:
-                st.success(f"✓ Alpha Vantage key loaded: {_av_debug[:4]}{'*' * (len(_av_debug)-4)}")
-            else:
-                st.error("✗ cfg_av_key is EMPTY — key not reaching session_state")
-                st.write("All session_state keys:", [k for k in st.session_state.keys()])
 
         for symbol in instruments:
             with st.expander(f"  {symbol}  ·  MARKET ANALYSIS", expanded=True):
