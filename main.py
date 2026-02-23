@@ -130,25 +130,52 @@ st.markdown("""
 
     /* ── MOBILE SIDEBAR ── */
     @media (max-width: 768px) {
+        /* Sidebar: full-width drawer on mobile */
         [data-testid="stSidebar"] {
-            min-width: 85vw !important;
-            max-width: 85vw !important;
+            min-width: 88vw !important;
+            max-width: 88vw !important;
+            transform: none !important;
         }
+        /* Force sidebar visible — override Streamlit's mobile collapse */
+        [data-testid="stSidebar"][aria-expanded="false"] {
+            transform: translateX(-100%) !important;
+        }
+        [data-testid="stSidebar"][aria-expanded="true"] {
+            transform: translateX(0) !important;
+        }
+        /* Hamburger button — large, obvious, always visible */
         [data-testid="stSidebarCollapsedControl"] {
-            top: 10px !important;
-            left: 10px !important;
-            background: var(--surface2) !important;
-            border: 1px solid var(--border2) !important;
-            border-radius: 4px !important;
-            padding: 6px 8px !important;
-            z-index: 1000 !important;
+            position: fixed !important;
+            top: 8px !important;
+            left: 8px !important;
+            width: 44px !important;
+            height: 44px !important;
+            background: #1E88E5 !important;
+            border: none !important;
+            border-radius: 8px !important;
+            padding: 10px !important;
+            z-index: 99999 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5) !important;
+            cursor: pointer !important;
         }
         [data-testid="stSidebarCollapsedControl"] svg {
-            fill: var(--txt-bright) !important;
-            width: 22px !important;
-            height: 22px !important;
+            fill: #FFFFFF !important;
+            width: 24px !important;
+            height: 24px !important;
         }
-        .block-container { padding-top: 56px !important; }
+        /* Also style the open/close button inside sidebar */
+        [data-testid="stSidebarCollapseButton"] {
+            background: var(--surface2) !important;
+            border-radius: 6px !important;
+        }
+        .block-container {
+            padding-top: 64px !important;
+            padding-left: 12px !important;
+            padding-right: 12px !important;
+        }
         .stTabs [data-baseweb="tab-list"] {
             overflow-x: auto !important;
             flex-wrap: nowrap !important;
@@ -417,7 +444,7 @@ st.markdown("""
     .fib-price { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--txt-bright); font-weight: 500; }
 
     /* Mobile hint */
-    .mobile-settings-hint { display: none; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--txt-muted); background: var(--surface); border: 1px solid var(--border); border-radius: 2px; padding: 10px 14px; text-align: center; margin-bottom: 14px; letter-spacing: 1px; }
+    .mobile-settings-hint { display: none; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #FFFFFF; background: #1E88E5; border: none; border-radius: 8px; padding: 12px 16px; text-align: center; margin-bottom: 16px; letter-spacing: 0.5px; cursor: pointer; }
     @media (max-width: 768px) { .mobile-settings-hint { display: block !important; } }
 
     /* Chrome */
@@ -1945,7 +1972,28 @@ def main():
     # ========== TAB 1: SIGNALS ==========
     with tab1:
         st.markdown('<div class="section-label">Live Multi-Timeframe Signal Matrix</div>', unsafe_allow_html=True)
-        st.markdown('<div class="mobile-settings-hint">Tap &#9776; top-left for Settings</div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="mobile-settings-hint">
+            &#9776;&nbsp; Tap the <strong>blue button</strong> top-left to open Settings
+        </div>
+        <script>
+        // Auto-click to open sidebar on mobile if it's collapsed
+        (function() {
+            var mq = window.matchMedia('(max-width: 768px)');
+            if (mq.matches) {
+                setTimeout(function() {
+                    var btn = document.querySelector('[data-testid="stSidebarCollapsedControl"] button');
+                    if (btn) {
+                        var sidebar = document.querySelector('[data-testid="stSidebar"]');
+                        if (sidebar && sidebar.getAttribute('aria-expanded') === 'false') {
+                            btn.click();
+                        }
+                    }
+                }, 800);
+            }
+        })();
+        </script>
+        """, unsafe_allow_html=True)
 
         if not instruments:
             st.warning("Select instruments in the sidebar.")
