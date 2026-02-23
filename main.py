@@ -8,11 +8,7 @@ import json
 from typing import Dict, List, Tuple, Optional
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-try:
-    from streamlit_autorefresh import st_autorefresh
-    HAS_AUTOREFRESH = True
-except ImportError:
-    HAS_AUTOREFRESH = False
+
 try:
     from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
     VADER_AVAILABLE = True
@@ -481,17 +477,6 @@ with st.sidebar:
 
 
     st.divider()
-    st.markdown("### ── AUTO-REFRESH ──")
-    auto_refresh = st.toggle("Auto Refresh", value=False, key="auto_refresh")
-    refresh_interval = st.select_slider(
-        "Interval",
-        options=[30, 60, 120, 300, 600],
-        value=60,
-        format_func=lambda x: f"{x}s" if x < 60 else f"{x//60}m",
-        key="refresh_interval",
-        disabled=not auto_refresh
-    )
-    st.divider()
     run_btn = st.button("◈  REFRESH NOW", type="primary", use_container_width=True)
     if run_btn:
         st.cache_data.clear()
@@ -500,20 +485,7 @@ with st.sidebar:
 
 
 # ==================================================
-# AUTO-REFRESH
-# ==================================================
-# Auto-refresh — reads from either sidebar widget or mobile session_state
-_ar_active = (st.session_state.get("auto_refresh", False) or
-              st.session_state.get("mob_auto_refresh", False))
-_ar_interval = (st.session_state.get("mob_refresh_interval", 60)
-                if st.session_state.get("mob_auto_refresh", False)
-                else st.session_state.get("refresh_interval", 60))
-if HAS_AUTOREFRESH and _ar_active:
-    # Just rerun — cache TTL (600s) handles data freshness automatically
-    # Clearing cache on every tick would burn API rate limits and add noise
-    st_autorefresh(interval=_ar_interval * 1000, limit=None, key="autorefresh_counter")
-elif not HAS_AUTOREFRESH and _ar_active:
-    st.warning("⚠ streamlit-autorefresh not installed — add to requirements.txt")
+
 
 # ==================================================
 # DATA LAYER — REAL OHLC FROM FREE SOURCES
@@ -2162,17 +2134,9 @@ def main():
 
         new_news = st.text_input("NewsData.io Key (optional)", type="password", key="news_mobile")
 
-        with st.expander("── AUTO-REFRESH ──", expanded=False):
-            st.toggle("Auto Refresh", value=False, key="mob_auto_refresh")
-            st.select_slider(
-                "Interval", options=[30, 60, 120, 300, 600], value=60,
-                format_func=lambda x: f"{x}s" if x < 60 else f"{x//60}m",
-                key="mob_refresh_interval",
-                disabled=not st.session_state.get("mob_auto_refresh", False)
-            )
-            if st.button("◈  REFRESH NOW", use_container_width=True, key="refresh_now_mobile"):
-                st.cache_data.clear()
-                st.rerun()
+        if st.button("◈  REFRESH NOW", use_container_width=True, key="refresh_now_mobile"):
+            st.cache_data.clear()
+            st.rerun()
 
         st.divider()
         if st.button("◈  APPLY & RUN ANALYSIS", type="primary", use_container_width=True, key="apply_mobile"):
@@ -2191,6 +2155,7 @@ def main():
     # ========== TAB 1: SIGNALS ==========
     with tab1:
         st.markdown('<div class="section-label">Live Multi-Timeframe Signal Matrix</div>', unsafe_allow_html=True)
+        st.caption(f"Last updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')} · press ◈ REFRESH NOW for fresh data")
 
 
         if not instruments:
