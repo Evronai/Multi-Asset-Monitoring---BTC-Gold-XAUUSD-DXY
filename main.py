@@ -9,6 +9,11 @@ from typing import Dict, List, Tuple, Optional
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 try:
+    from streamlit_autorefresh import st_autorefresh
+    HAS_AUTOREFRESH = True
+except ImportError:
+    HAS_AUTOREFRESH = False
+try:
     from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
     VADER_AVAILABLE = True
 except ImportError:
@@ -476,12 +481,32 @@ with st.sidebar:
 
 
     st.divider()
-    run_btn = st.button("◈  REFRESH ANALYSIS", type="primary", use_container_width=True)
+    st.markdown("### ── AUTO-REFRESH ──")
+    auto_refresh = st.toggle("Auto Refresh", value=False, key="auto_refresh")
+    refresh_interval = st.select_slider(
+        "Interval",
+        options=[30, 60, 120, 300, 600],
+        value=60,
+        format_func=lambda x: f"{x}s" if x < 60 else f"{x//60}m",
+        key="refresh_interval",
+        disabled=not auto_refresh
+    )
+    st.divider()
+    run_btn = st.button("◈  REFRESH NOW", type="primary", use_container_width=True)
     if run_btn:
         st.cache_data.clear()
         st.rerun()
     st.caption(f"SYS · {datetime.utcnow().strftime('%H:%M:%S UTC')}")
 
+
+# ==================================================
+# AUTO-REFRESH
+# ==================================================
+if HAS_AUTOREFRESH and st.session_state.get("auto_refresh", False):
+    _interval_ms = st.session_state.get("refresh_interval", 60) * 1000
+    _count = st_autorefresh(interval=_interval_ms, limit=None, key="autorefresh_counter")
+    if _count > 0:
+        st.cache_data.clear()
 
 # ==================================================
 # DATA LAYER — REAL OHLC FROM FREE SOURCES
@@ -1344,7 +1369,8 @@ class MultiTimeframeAnalyzer:
 
         # 8. Volume confirmation — direction-aware (high vol on down candle = bearish)
         if vol_ratio > 0 and vol_ratio != 1.0:
-            last_candle_bullish = price >= emas.get(9, price)  # proxy: price vs fast EMA
+            # Bullish if price above fast EMA AND above slower EMA (momentum up)
+            last_candle_bullish = price >= emas.get(9, price) and price >= emas.get(21, price)
             if vol_ratio > 1.3 and last_candle_bullish:
                 votes.append(1)
                 reasons.append(f"✅ High volume bullish candle ({vol_ratio:.1f}x)")
@@ -1425,9 +1451,11 @@ class MultiTimeframeAnalyzer:
         bear_votes = votes.count(-1)
         total = len(votes)
 
-        if bull_votes > bear_votes and (bull_votes / total) >= 0.55:
+        # Simple majority — more votes than opponent is enough
+        # 0.55 threshold was suppressing valid signals (e.g. 4/8 bull = 0.50 → wrongly NEUTRAL)
+        if bull_votes > bear_votes:
             bias = 'BULLISH'
-        elif bear_votes > bull_votes and (bear_votes / total) >= 0.55:
+        elif bear_votes > bull_votes:
             bias = 'BEARISH'
         else:
             bias = 'NEUTRAL'
@@ -1457,8 +1485,11 @@ class MultiTimeframeAnalyzer:
         # ADX modifier: stronger trend = more confidence
         adx_mod = min(1.0 + (adx - 20) / 100, 1.3) if adx > 20 else 0.8
 
-        # Volume modifier
-        vol_mod = min(1.0 + (vol_ratio - 1.0) * 0.2, 1.2) if vol_ratio > 1 else 0.9
+        # Volume modifier — neutral if no real volume data (forex = vol_ratio 1.0)
+        if vol_ratio == 1.0 or vol_ratio == 0:
+            vol_mod = 1.0  # no data, no penalty
+        else:
+            vol_mod = min(1.0 + (vol_ratio - 1.0) * 0.2, 1.2) if vol_ratio > 1 else 0.92
 
         # Timeframe modifier — higher TF signals are more reliable
         tf_mod = {
