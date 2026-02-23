@@ -502,11 +502,15 @@ with st.sidebar:
 # ==================================================
 # AUTO-REFRESH
 # ==================================================
-if HAS_AUTOREFRESH and st.session_state.get("auto_refresh", False):
-    _interval_ms = st.session_state.get("refresh_interval", 60) * 1000
-    _count = st_autorefresh(interval=_interval_ms, limit=None, key="autorefresh_counter")
+# Auto-refresh — reads from either sidebar widget or mobile session_state
+_ar_active = st.session_state.get("auto_refresh", False)
+_ar_interval = st.session_state.get("refresh_interval", 60)
+if HAS_AUTOREFRESH and _ar_active:
+    _count = st_autorefresh(interval=_ar_interval * 1000, limit=None, key="autorefresh_counter")
     if _count > 0:
         st.cache_data.clear()
+elif not HAS_AUTOREFRESH and _ar_active:
+    st.warning("⚠ streamlit-autorefresh not installed — add to requirements.txt")
 
 # ==================================================
 # DATA LAYER — REAL OHLC FROM FREE SOURCES
@@ -1319,8 +1323,15 @@ class MultiTimeframeAnalyzer:
                 votes.append(0)
                 reasons.append("⚪ EMAs mixed")
 
-        # 4. Price vs EMA 50
-        if 50 in emas:
+        # 4. Price vs EMA 200 — macro trend bias (non-redundant with stack)
+        if 200 in emas:
+            if price > emas[200]:
+                votes.append(1)
+                reasons.append("✅ Price above EMA 200 — macro bull")
+            else:
+                votes.append(-1)
+                reasons.append("🔴 Price below EMA 200 — macro bear")
+        elif 50 in emas:
             if price > emas[50]:
                 votes.append(1)
                 reasons.append("✅ Price above EMA 50")
@@ -1345,15 +1356,22 @@ class MultiTimeframeAnalyzer:
             votes.append(0)
             reasons.append(f"⚪ RSI neutral zone ({rsi:.1f})")
 
-        # 6. MACD — use histogram for direction + cross
+        # 6. MACD — histogram direction + line vs signal cross
         if macd_hist > 0 and macd > macd_sig:
             votes.append(1)
-            reasons.append("✅ MACD bullish cross + histogram positive")
+            reasons.append("✅ MACD bullish — histogram positive, line above signal")
         elif macd_hist < 0 and macd < macd_sig:
             votes.append(-1)
-            reasons.append("🔴 MACD bearish cross + histogram negative")
+            reasons.append("🔴 MACD bearish — histogram negative, line below signal")
+        elif macd_hist > 0:
+            votes.append(1)
+            reasons.append("✅ MACD histogram turning positive")
+        elif macd_hist < 0:
+            votes.append(-1)
+            reasons.append("🔴 MACD histogram turning negative")
         else:
             votes.append(0)
+            reasons.append("⚪ MACD flat — no momentum")
 
         # 7. ADX trend strength + DI direction
         if adx > 25:
@@ -1419,23 +1437,34 @@ class MultiTimeframeAnalyzer:
             votes.append(-1)
             reasons.append("🔴 Price at Bearish Order Block — institutional supply zone")
 
-        recent_bullish_fvg = any(f['type'] == 'BULLISH_FVG' for f in fvgs[-3:])
-        recent_bearish_fvg = any(f['type'] == 'BEARISH_FVG' for f in fvgs[-3:])
-        if recent_bullish_fvg:
-            votes.append(1)
-            reasons.append("✅ Bullish FVG present")
-        if recent_bearish_fvg:
-            votes.append(-1)
-            reasons.append("🔴 Bearish FVG present")
+        # FVGs — only vote if price is inside or very near the gap
+        def near_fvg(fvg, current_price, threshold=0.015):
+            top = fvg.get('top', 0)
+            bottom = fvg.get('bottom', 0)
+            if top == 0 or bottom == 0:
+                return False
+            mid = (top + bottom) / 2
+            # Price inside gap OR within threshold of it
+            return (bottom <= current_price <= top) or (abs(current_price - mid) / mid < threshold)
 
-        # 11. Liquidity sweeps
-        for sw in sweeps[-2:]:
+        near_bull_fvg = any(f['type'] == 'BULLISH_FVG' and near_fvg(f, price) for f in fvgs[-10:])
+        near_bear_fvg = any(f['type'] == 'BEARISH_FVG' and near_fvg(f, price) for f in fvgs[-10:])
+        if near_bull_fvg:
+            votes.append(1)
+            reasons.append("✅ Price at Bullish FVG — unfilled institutional gap")
+        if near_bear_fvg:
+            votes.append(-1)
+            reasons.append("🔴 Price at Bearish FVG — unfilled institutional gap")
+
+        # 11. Liquidity sweeps — only most recent sweep counts
+        if sweeps:
+            sw = sweeps[-1]  # only the most recent
             if sw['type'] == 'SWEEP_LOW':
                 votes.append(1)
-                reasons.append("✅ Bullish liquidity sweep (stop hunt below)")
+                reasons.append("✅ Recent bullish liquidity sweep (stop hunt below — reversal signal)")
             elif sw['type'] == 'SWEEP_HIGH':
                 votes.append(-1)
-                reasons.append("🔴 Bearish liquidity sweep (stop hunt above)")
+                reasons.append("🔴 Recent bearish liquidity sweep (stop hunt above — reversal signal)")
 
         # 12. Divergences
         for div in divergences:
@@ -2091,6 +2120,22 @@ def main():
         new_atr  = st.slider("ATR Multiplier", 1.0, 5.0, cur_atr, 0.1, key="atr_mobile")
 
         new_news = st.text_input("NewsData.io Key (optional)", type="password", key="news_mobile")
+
+        with st.expander("── AUTO-REFRESH ──", expanded=False):
+            auto_refresh_mob = st.toggle("Auto Refresh", value=st.session_state.get("auto_refresh", False), key="auto_refresh_mobile")
+            if auto_refresh_mob != st.session_state.get("auto_refresh", False):
+                st.session_state["auto_refresh"] = auto_refresh_mob
+            refresh_int_mob = st.select_slider(
+                "Interval", options=[30, 60, 120, 300, 600], value=60,
+                format_func=lambda x: f"{x}s" if x < 60 else f"{x//60}m",
+                key="refresh_interval_mobile",
+                disabled=not auto_refresh_mob
+            )
+            if auto_refresh_mob:
+                st.session_state["refresh_interval"] = refresh_int_mob
+            if st.button("◈  REFRESH NOW", use_container_width=True, key="refresh_now_mobile"):
+                st.cache_data.clear()
+                st.rerun()
 
         st.divider()
         if st.button("◈  APPLY & RUN ANALYSIS", type="primary", use_container_width=True, key="apply_mobile"):
