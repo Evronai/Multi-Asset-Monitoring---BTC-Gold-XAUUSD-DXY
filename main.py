@@ -516,33 +516,9 @@ class DataFetcher:
     def __init__(self):
         pass
 
-    @st.cache_data(ttl=600, show_spinner=False)
-    def fetch(_self, symbol: str, interval: str, limit: int = 500) -> Tuple[Optional[pd.DataFrame], str]:
-        """
-        Returns (DataFrame, source_label).
-        Crypto: Kraken (primary) → Coinbase → CoinGecko (last resort).
-        Forex: Kraken (EUR/USD, GBP/USD, USD/JPY). All free, no key.
-        """
-        is_crypto = symbol in ["BTC/USDT", "ETH/USDT", "BTC-USD", "ETH-USD"]
-
-        if is_crypto:
-            df, src = _self._fetch_kraken(symbol, interval, limit)
-            if df is not None and len(df) >= 20:
-                return df, src
-            df, src = _self._fetch_binance(symbol, interval, limit)
-            if df is not None and len(df) >= 20:
-                return df, src
-            df, src = _self._fetch_coinbase(symbol, interval, limit)
-            if df is not None and len(df) >= 20:
-                return df, src
-            df, src = _self._fetch_coingecko(symbol, interval)
-            return df, src
-        else:
-            # Forex via Kraken (EUR/USD, GBP/USD, USD/JPY)
-            df, src = _self._fetch_kraken(symbol, interval, limit)
-            if df is not None and len(df) >= 20:
-                return df, src
-            return None, f"No data source available for {symbol}"
+    def fetch(self, symbol: str, interval: str, limit: int = 500) -> Tuple[Optional[pd.DataFrame], str]:
+        """Delegate to module-level cached fetch so cache is truly shared across reruns."""
+        return _cached_fetch(symbol, interval, limit)
 
     def _fetch_kraken(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
         """
@@ -800,6 +776,34 @@ class DataFetcher:
                 result.iloc[i] = True
         return result
 
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _cached_fetch(symbol: str, interval: str, limit: int = 500) -> Tuple[Optional[pd.DataFrame], str]:
+    """
+    Module-level cached fetch — cache key is (symbol, interval, limit) only.
+    This ensures desktop and mobile always get identical data for the same symbol+TF.
+    Crypto: Kraken → Binance → Coinbase → CoinGecko
+    Forex:  Kraken (EUR/USD, GBP/USD, USD/JPY)
+    """
+    _f = DataFetcher()
+    is_crypto = symbol in ["BTC/USDT", "ETH/USDT", "BTC-USD", "ETH-USD"]
+    if is_crypto:
+        df, src = _f._fetch_kraken(symbol, interval, limit)
+        if df is not None and len(df) >= 20:
+            return df, src
+        df, src = _f._fetch_binance(symbol, interval, limit)
+        if df is not None and len(df) >= 20:
+            return df, src
+        df, src = _f._fetch_coinbase(symbol, interval, limit)
+        if df is not None and len(df) >= 20:
+            return df, src
+        return _f._fetch_coingecko(symbol, interval)
+    else:
+        df, src = _f._fetch_kraken(symbol, interval, limit)
+        if df is not None and len(df) >= 20:
+            return df, src
+        return None, f"No data source available for {symbol}"
 
 
 # ==================================================
