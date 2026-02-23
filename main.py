@@ -509,9 +509,9 @@ _ar_interval = (st.session_state.get("mob_refresh_interval", 60)
                 if st.session_state.get("mob_auto_refresh", False)
                 else st.session_state.get("refresh_interval", 60))
 if HAS_AUTOREFRESH and _ar_active:
-    _count = st_autorefresh(interval=_ar_interval * 1000, limit=None, key="autorefresh_counter")
-    if _count > 0:
-        st.cache_data.clear()
+    # Just rerun — cache TTL (600s) handles data freshness automatically
+    # Clearing cache on every tick would burn API rate limits and add noise
+    st_autorefresh(interval=_ar_interval * 1000, limit=None, key="autorefresh_counter")
 elif not HAS_AUTOREFRESH and _ar_active:
     st.warning("⚠ streamlit-autorefresh not installed — add to requirements.txt")
 
@@ -814,7 +814,7 @@ class DataFetcher:
 
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def _cached_fetch(symbol: str, interval: str, limit: int = 500) -> Tuple[Optional[pd.DataFrame], str]:
     """
     Module-level cached fetch — cache key is (symbol, interval, limit) only.
@@ -2218,62 +2218,71 @@ def main():
                 )
 
                 # ── SIGNAL LOCKING ──
-                # A new signal only LOCKS in when it has appeared on
-                # CONSECUTIVE_NEEDED consecutive refreshes at LOCK_CONF_THRESHOLD% confidence.
-                # This prevents noise-driven flips on every refresh.
-                LOCK_CONF_THRESHOLD = 62.0   # minimum confidence to even consider a flip
-                CONSECUTIVE_NEEDED  = 2       # must appear N times in a row to lock
+                # Signal only flips when NEW data produces a different result
+                # at sufficient confidence. Cache TTL (300s) ensures "new data"
+                # means the candles actually changed, not just a page rerun.
+                LOCK_CONF_THRESHOLD = 62.0
 
-                _sk   = f"locked_signal_{symbol}"    # locked signal direction
-                _ck   = f"locked_conf_{symbol}"       # locked confidence
-                _pk   = f"locked_price_{symbol}"      # locked price
-                _atk  = f"locked_atr_{symbol}"        # locked atr
-                _csk  = f"candidate_signal_{symbol}"  # candidate (not yet locked)
-                _cck  = f"candidate_count_{symbol}"   # consecutive count for candidate
-                _tsk  = f"locked_time_{symbol}"       # timestamp when locked
-                _cons = consolidated  # shorthand
+                _sk  = f"locked_signal_{symbol}"   # locked direction
+                _ck  = f"locked_conf_{symbol}"      # locked confidence
+                _pk  = f"locked_price_{symbol}"     # price at lock time
+                _atk = f"locked_atr_{symbol}"       # ATR at lock time
+                _tsk = f"locked_time_{symbol}"      # UTC timestamp of lock
+                _csk = f"candidate_signal_{symbol}" # pending flip direction
+                _ctk = f"candidate_time_{symbol}"   # when candidate first seen
 
-                new_sig  = _cons['signal']
-                new_conf = _cons['confidence']
-                locked   = st.session_state.get(_sk, 'NEUTRAL')
+                new_sig  = consolidated['signal']
+                new_conf = consolidated['confidence']
+                now_utc  = datetime.utcnow()
 
                 if new_sig != 'NEUTRAL' and new_conf >= LOCK_CONF_THRESHOLD:
-                    if new_sig == st.session_state.get(_csk):
-                        # Same candidate — increment counter
-                        st.session_state[_cck] = st.session_state.get(_cck, 0) + 1
+                    existing_lock = st.session_state.get(_sk, 'NEUTRAL')
+                    if new_sig != existing_lock:
+                        # Different from locked — start or continue candidacy
+                        if st.session_state.get(_csk) != new_sig:
+                            # New candidate — record first-seen time
+                            st.session_state[_csk] = new_sig
+                            st.session_state[_ctk] = now_utc
+                        else:
+                            # Same candidate — check if held for 5 minutes
+                            first_seen = st.session_state.get(_ctk, now_utc)
+                            held_secs  = (now_utc - first_seen).total_seconds()
+                            if held_secs >= 300:  # 5 min = 1 full cache cycle
+                                # Promote candidate to locked signal
+                                st.session_state[_sk]  = new_sig
+                                st.session_state[_ck]  = new_conf
+                                st.session_state[_pk]  = consolidated['price']
+                                st.session_state[_atk] = consolidated['atr']
+                                st.session_state[_tsk] = now_utc.strftime('%H:%M:%S UTC')
+                                st.session_state[_csk] = None
+                                st.session_state[_ctk] = None
                     else:
-                        # New candidate — reset counter
-                        st.session_state[_csk] = new_sig
-                        st.session_state[_cck] = 1
-
-                    if st.session_state[_cck] >= CONSECUTIVE_NEEDED:
-                        # Lock it in — signal is confirmed
-                        st.session_state[_sk]  = new_sig
+                        # Matches locked — update confidence/price, clear candidate
                         st.session_state[_ck]  = new_conf
-                        st.session_state[_pk]  = _cons['price']
-                        st.session_state[_atk] = _cons['atr']
-                        st.session_state[_tsk] = datetime.utcnow().strftime('%H:%M:%S UTC')
-                        st.session_state[_cck] = 0  # reset after locking
+                        st.session_state[_pk]  = consolidated['price']
+                        st.session_state[_atk] = consolidated['atr']
+                        st.session_state[_csk] = None
                 else:
-                    # Neutral or low confidence — reset candidate but keep locked signal
+                    # Neutral or low conf — don't flip, clear candidate
                     st.session_state[_csk] = None
-                    st.session_state[_cck] = 0
 
-                # Use locked signal for display; fall back to live if nothing locked yet
-                sig    = st.session_state.get(_sk, new_sig)
-                conf   = st.session_state.get(_ck, _cons['confidence'])
-                price  = st.session_state.get(_pk, _cons['price'])
-                atr_val = st.session_state.get(_atk, _cons['atr'])
-                locked_at = st.session_state.get(_tsk, None)
-                valid  = _cons['valid']
+                # Display: use locked signal, fall back to live if nothing locked
+                sig     = st.session_state.get(_sk, new_sig)
+                conf    = st.session_state.get(_ck, consolidated['confidence'])
+                price   = st.session_state.get(_pk, consolidated['price'])
+                atr_val = st.session_state.get(_atk, consolidated['atr'])
+                locked_at = st.session_state.get(_tsk)
+                valid   = consolidated['valid']
 
-                # Show locking status
-                candidate_sig   = st.session_state.get(_csk)
-                candidate_count = st.session_state.get(_cck, 0)
+                # Status indicator
+                candidate_sig = st.session_state.get(_csk)
                 if candidate_sig and candidate_sig != sig:
-                    st.info(f"⏳ Candidate {candidate_sig} signal building ({candidate_count}/{CONSECUTIVE_NEEDED} confirmations at {new_conf:.1f}% conf) — locked signal unchanged")
-                elif locked_at:
-                    st.caption(f"🔒 Signal locked at {locked_at} · requires {CONSECUTIVE_NEEDED}× {LOCK_CONF_THRESHOLD:.0f}%+ conf to flip")
+                    first_seen = st.session_state.get(_ctk, now_utc)
+                    held_secs  = (now_utc - first_seen).total_seconds()
+                    remaining  = max(0, 300 - held_secs)
+                    st.info(f"⏳ {candidate_sig} signal candidate at {new_conf:.1f}% conf — locks in ~{remaining/60:.1f} min if sustained")
+                if locked_at:
+                    st.caption(f"🔒 Locked {locked_at} · flips after 5 min sustained at {LOCK_CONF_THRESHOLD:.0f}%+ conf")
 
                 # ── SIGNAL BANNER ──
                 if sig == 'BULLISH':
