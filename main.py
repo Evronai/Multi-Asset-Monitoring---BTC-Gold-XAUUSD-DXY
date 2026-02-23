@@ -503,8 +503,11 @@ with st.sidebar:
 # AUTO-REFRESH
 # ==================================================
 # Auto-refresh — reads from either sidebar widget or mobile session_state
-_ar_active = st.session_state.get("auto_refresh", False)
-_ar_interval = st.session_state.get("refresh_interval", 60)
+_ar_active = (st.session_state.get("auto_refresh", False) or
+              st.session_state.get("mob_auto_refresh", False))
+_ar_interval = (st.session_state.get("mob_refresh_interval", 60)
+                if st.session_state.get("mob_auto_refresh", False)
+                else st.session_state.get("refresh_interval", 60))
 if HAS_AUTOREFRESH and _ar_active:
     _count = st_autorefresh(interval=_ar_interval * 1000, limit=None, key="autorefresh_counter")
     if _count > 0:
@@ -2122,17 +2125,13 @@ def main():
         new_news = st.text_input("NewsData.io Key (optional)", type="password", key="news_mobile")
 
         with st.expander("── AUTO-REFRESH ──", expanded=False):
-            auto_refresh_mob = st.toggle("Auto Refresh", value=st.session_state.get("auto_refresh", False), key="auto_refresh_mobile")
-            if auto_refresh_mob != st.session_state.get("auto_refresh", False):
-                st.session_state["auto_refresh"] = auto_refresh_mob
-            refresh_int_mob = st.select_slider(
+            st.toggle("Auto Refresh", value=False, key="mob_auto_refresh")
+            st.select_slider(
                 "Interval", options=[30, 60, 120, 300, 600], value=60,
                 format_func=lambda x: f"{x}s" if x < 60 else f"{x//60}m",
-                key="refresh_interval_mobile",
-                disabled=not auto_refresh_mob
+                key="mob_refresh_interval",
+                disabled=not st.session_state.get("mob_auto_refresh", False)
             )
-            if auto_refresh_mob:
-                st.session_state["refresh_interval"] = refresh_int_mob
             if st.button("◈  REFRESH NOW", use_container_width=True, key="refresh_now_mobile"):
                 st.cache_data.clear()
                 st.rerun()
