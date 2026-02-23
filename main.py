@@ -516,7 +516,7 @@ class DataFetcher:
     def __init__(self):
         pass
 
-    @st.cache_data(ttl=300, show_spinner=False)
+    @st.cache_data(ttl=600, show_spinner=False)
     def fetch(_self, symbol: str, interval: str, limit: int = 500) -> Tuple[Optional[pd.DataFrame], str]:
         """
         Returns (DataFrame, source_label).
@@ -527,6 +527,9 @@ class DataFetcher:
 
         if is_crypto:
             df, src = _self._fetch_kraken(symbol, interval, limit)
+            if df is not None and len(df) >= 20:
+                return df, src
+            df, src = _self._fetch_binance(symbol, interval, limit)
             if df is not None and len(df) >= 20:
                 return df, src
             df, src = _self._fetch_coinbase(symbol, interval, limit)
@@ -586,7 +589,9 @@ class DataFetcher:
             df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", utc=True)
             df.set_index("timestamp", inplace=True)
             df = df[["open", "high", "low", "close", "volume"]].astype(float)
-            df = df[df["volume"] > 0].sort_index()
+            df = df.sort_index()
+            # Drop only if ALL of o/h/l/c are zero (truly empty)
+            df = df[~((df["open"] == 0) & (df["close"] == 0))]
 
             display_map = {
                 "XBTUSD": "BTC/USD", "ETHUSD": "ETH/USD",
@@ -598,6 +603,37 @@ class DataFetcher:
 
         except Exception as e:
             return None, f"Kraken error: {e}"
+
+    def _fetch_binance(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
+        """Binance public API — free, no key, very reliable."""
+        try:
+            tf_map = {
+                "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
+                "1h": "1h", "4h": "4h", "1day": "1d", "1week": "1w"
+            }
+            sym_map = {"BTC/USDT": "BTCUSDT", "ETH/USDT": "ETHUSDT",
+                       "BTC-USD": "BTCUSDT", "ETH-USD": "ETHUSDT"}
+            binance_sym = sym_map.get(symbol)
+            if not binance_sym:
+                return None, f"Binance: no mapping for {symbol}"
+            tf = tf_map.get(interval, "1h")
+            url = "https://api.binance.com/api/v3/klines"
+            params = {"symbol": binance_sym, "interval": tf, "limit": min(limit, 1000)}
+            resp = requests.get(url, params=params, timeout=15,
+                                headers={"User-Agent": "Mozilla/5.0"})
+            resp.raise_for_status()
+            raw = resp.json()
+            df = pd.DataFrame(raw, columns=[
+                "timestamp","open","high","low","close","volume",
+                "close_time","quote_vol","trades","taker_buy_base","taker_buy_quote","ignore"
+            ])
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+            df.set_index("timestamp", inplace=True)
+            df = df[["open","high","low","close","volume"]].astype(float)
+            df = df[df["volume"] > 0].sort_index()
+            return df, f"Binance ({symbol})"
+        except Exception as e:
+            return None, f"Binance error: {e}"
 
     def _fetch_coinbase(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
         """Coinbase Exchange public API — free, no key."""
@@ -662,7 +698,16 @@ class DataFetcher:
                                 timeout=15, headers={"User-Agent": "Mozilla/5.0"})
 
             if resp.status_code == 429:
-                return None, "CoinGecko rate-limited (429) — all sources exhausted"
+                # Retry with backoff
+                import time
+                for wait in [2, 5]:
+                    time.sleep(wait)
+                    resp = requests.get(url, params={"vs_currency": "usd", "days": days},
+                                        timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+                    if resp.status_code != 429:
+                        break
+                if resp.status_code == 429:
+                    return None, "CoinGecko rate-limited — data unavailable, retry in 60s"
 
             resp.raise_for_status()
             raw = resp.json()
@@ -2074,13 +2119,34 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
 
-                # ── KEY METRICS ROW ──
-                mc1, mc2, mc3, mc4, mc5 = st.columns(5)
-                mc1.metric("PRICE", f"{price:.4f}")
-                mc2.metric("ATR", f"{atr_val:.4f}")
-                mc3.metric("HTF ALIGN", "YES" if consolidated['htf_confirmed'] else "NO")
-                mc4.metric("BULL TF", len(consolidated['bull_tfs']))
-                mc5.metric("BEAR TF", len(consolidated['bear_tfs']))
+                # ── KEY METRICS ROW — HTML grid stays horizontal on mobile ──
+                htf_txt   = "YES ✅" if consolidated['htf_confirmed'] else "NO ❌"
+                bull_tfs_n = len(consolidated['bull_tfs'])
+                bear_tfs_n = len(consolidated['bear_tfs'])
+                st.markdown(f"""
+                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:10px 0;grid-template-columns:repeat(auto-fit,minmax(60px,1fr));">
+                  <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 6px;text-align:center;">
+                    <div style="color:var(--txt-muted);font-size:9px;letter-spacing:1px;">PRICE</div>
+                    <div style="color:var(--txt-bright);font-size:11px;font-weight:600;font-family:'IBM Plex Mono',monospace;margin-top:3px;">{price:,.2f}</div>
+                  </div>
+                  <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 6px;text-align:center;">
+                    <div style="color:var(--txt-muted);font-size:9px;letter-spacing:1px;">ATR</div>
+                    <div style="color:var(--txt-bright);font-size:11px;font-weight:600;font-family:'IBM Plex Mono',monospace;margin-top:3px;">{atr_val:.2f}</div>
+                  </div>
+                  <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 6px;text-align:center;">
+                    <div style="color:var(--txt-muted);font-size:9px;letter-spacing:1px;">HTF</div>
+                    <div style="font-size:11px;font-weight:600;margin-top:3px;">{"✅" if consolidated['htf_confirmed'] else "❌"}</div>
+                  </div>
+                  <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 6px;text-align:center;">
+                    <div style="color:var(--txt-muted);font-size:9px;letter-spacing:1px;">BULL TF</div>
+                    <div style="color:#4ABA7A;font-size:11px;font-weight:600;font-family:'IBM Plex Mono',monospace;margin-top:3px;">{bull_tfs_n}</div>
+                  </div>
+                  <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 6px;text-align:center;">
+                    <div style="color:var(--txt-muted);font-size:9px;letter-spacing:1px;">BEAR TF</div>
+                    <div style="color:#E06070;font-size:11px;font-weight:600;font-family:'IBM Plex Mono',monospace;margin-top:3px;">{bear_tfs_n}</div>
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
 
                 # ── RISK LEVELS ──
                 if sig != 'NEUTRAL' and price > 0 and atr_val > 0:
