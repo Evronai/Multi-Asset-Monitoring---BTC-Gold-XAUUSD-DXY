@@ -472,6 +472,21 @@ with st.sidebar:
     st.markdown("### ── CONFIG ──")
     st.caption("Settings are in the **⚙ SETTINGS** tab.")
     st.divider()
+
+    # Alpha Vantage key — saved immediately on change, no Apply needed
+    _av_input = st.text_input(
+        "Alpha Vantage Key",
+        type="password",
+        value=st.session_state.get("cfg_av_key", ""),
+        key="sidebar_av_key",
+        help="Required for XAU/USD. Free at alphavantage.co",
+        placeholder="Enter key for XAU/USD…"
+    )
+    if _av_input and _av_input != st.session_state.get("cfg_av_key", ""):
+        st.session_state["cfg_av_key"] = _av_input
+        st.cache_data.clear()
+
+    st.divider()
     run_btn = st.button("◈  REFRESH ANALYSIS", type="primary", use_container_width=True)
     if run_btn:
         st.cache_data.clear()
@@ -2114,10 +2129,17 @@ def main():
         new_htf = st.checkbox("Require HTF Confirmation", value=cur_htf, key="htf_mobile")
         new_risk = st.slider("Max Risk %", 0.1, 5.0, cur_risk, 0.1, key="risk_mobile")
         new_atr  = st.slider("ATR Multiplier", 1.0, 5.0, cur_atr, 0.1, key="atr_mobile")
-        new_av   = st.text_input("Alpha Vantage Key (for XAU/USD)", type="password",
-                              value=st.session_state.get("cfg_av_key", ""),
-                              key="av_mobile",
-                              help="Free key at alphavantage.co — required for XAU/USD data")
+        new_av = st.text_input(
+            "Alpha Vantage Key (for XAU/USD)", type="password",
+            value=st.session_state.get("cfg_av_key", ""),
+            key="av_mobile",
+            help="Free key at alphavantage.co — required for XAU/USD data",
+            placeholder="Paste your free API key here…"
+        )
+        if new_av and new_av != st.session_state.get("cfg_av_key", ""):
+            st.session_state["cfg_av_key"] = new_av
+            st.cache_data.clear()
+            st.info("✓ Alpha Vantage key saved — press APPLY to run analysis")
         new_news = st.text_input("NewsData.io Key (optional)", type="password", key="news_mobile")
 
         st.divider()
