@@ -1241,11 +1241,20 @@ class MultiTimeframeAnalyzer:
         price = float(cur['close'])
 
         # Generate signals
+        # Rate of change — fast momentum signals
+        roc3 = None
+        roc8 = None
+        if len(df) >= 4:
+            roc3 = float((df['close'].iloc[-1] - df['close'].iloc[-4]) / df['close'].iloc[-4] * 100)
+        if len(df) >= 9:
+            roc8 = float((df['close'].iloc[-1] - df['close'].iloc[-9]) / df['close'].iloc[-9] * 100)
+
         signals = self._generate_signals(
             price, rsi_val, macd_val, macd_sig, hist_val, adx_val,
             plus_di_val, minus_di_val, vol_ratio, emas, structure,
             order_blocks, fvgs, sweeps, divergences,
-            bb_upper.iloc[-1], bb_mid.iloc[-1], bb_lower.iloc[-1]
+            bb_upper.iloc[-1], bb_mid.iloc[-1], bb_lower.iloc[-1],
+            roc3=roc3, roc8=roc8
         )
 
         confidence = self._calc_confidence(signals, adx_val, vol_ratio, tf)
@@ -1285,7 +1294,8 @@ class MultiTimeframeAnalyzer:
     def _generate_signals(self, price, rsi, macd, macd_sig, macd_hist, adx,
                           plus_di, minus_di, vol_ratio, emas, structure,
                           order_blocks, fvgs, sweeps, divergences,
-                          bb_upper, bb_mid, bb_lower) -> Dict:
+                          bb_upper, bb_mid, bb_lower,
+                          roc3=None, roc8=None) -> Dict:
         """
         Rule-based signal generation with scoring.
         Each component votes +1 bullish, -1 bearish, 0 neutral.
@@ -1314,7 +1324,7 @@ class MultiTimeframeAnalyzer:
             votes.append(-1)
             reasons.append("🔴 Bearish BOS — breaking down into new structure")
 
-        # 3. EMA alignment (9 > 21 > 50 > 200)
+        # 3. EMA stack — 1 vote only (lagging, so capped at single vote)
         if all(k in emas for k in [9, 21, 50]):
             if emas[9] > emas[21] > emas[50]:
                 votes.append(1)
@@ -1326,21 +1336,20 @@ class MultiTimeframeAnalyzer:
                 votes.append(0)
                 reasons.append("⚪ EMAs mixed")
 
-        # 4. Price vs EMA 200 — macro trend bias (non-redundant with stack)
+        # 4. EMA200 macro bias — context only, half-weight via neutral if stack agrees
+        # Skip if EMA stack already voted same direction (avoid double-count)
         if 200 in emas:
-            if price > emas[200]:
+            above_200 = price > emas[200]
+            stack_bull = all(k in emas for k in [9,21,50]) and emas[9] > emas[21] > emas[50]
+            stack_bear = all(k in emas for k in [9,21,50]) and emas[9] < emas[21] < emas[50]
+            if above_200 and not stack_bull:
                 votes.append(1)
-                reasons.append("✅ Price above EMA 200 — macro bull")
-            else:
+                reasons.append("✅ Price above EMA 200 — macro bull context")
+            elif not above_200 and not stack_bear:
                 votes.append(-1)
-                reasons.append("🔴 Price below EMA 200 — macro bear")
-        elif 50 in emas:
-            if price > emas[50]:
-                votes.append(1)
-                reasons.append("✅ Price above EMA 50")
+                reasons.append("🔴 Price below EMA 200 — macro bear context")
             else:
-                votes.append(-1)
-                reasons.append("🔴 Price below EMA 50")
+                votes.append(0)  # stack already captured this direction
 
         # 5. RSI — momentum + extremes only (zone-only voting is unreliable)
         if rsi >= 70:
@@ -1352,12 +1361,41 @@ class MultiTimeframeAnalyzer:
         elif rsi >= 55:
             votes.append(1)
             reasons.append(f"✅ RSI above 55 — bullish momentum ({rsi:.1f})")
-        elif rsi < 45:
+        elif rsi < 48:
             votes.append(-1)
-            reasons.append(f"🔴 RSI below 45 — bearish momentum ({rsi:.1f})")
+            reasons.append(f"🔴 RSI below 48 — bearish momentum ({rsi:.1f})")
         else:
             votes.append(0)
             reasons.append(f"⚪ RSI neutral zone ({rsi:.1f})")
+
+        # 5b. PRICE MOMENTUM — rate of change last 3 & 8 candles (fast, responds immediately)
+        # Passed in via the roc3/roc8 parameters added below
+        if roc3 is not None:
+            if roc3 < -0.8:          # dropped >0.8% in 3 candles
+                votes.append(-1)
+                reasons.append(f"🔴 Sharp 3-candle drop ({roc3:.2f}%) — momentum bearish")
+            elif roc3 > 0.8:
+                votes.append(1)
+                reasons.append(f"✅ Sharp 3-candle rally ({roc3:.2f}%) — momentum bullish")
+            elif roc3 < -0.3:
+                votes.append(-1)
+                reasons.append(f"🔴 3-candle decline ({roc3:.2f}%)")
+            elif roc3 > 0.3:
+                votes.append(1)
+                reasons.append(f"✅ 3-candle advance ({roc3:.2f}%)")
+            else:
+                votes.append(0)
+                reasons.append(f"⚪ 3-candle flat ({roc3:.2f}%)")
+
+        if roc8 is not None:
+            if roc8 < -1.5:
+                votes.append(-1)
+                reasons.append(f"🔴 8-candle downtrend ({roc8:.2f}%)")
+            elif roc8 > 1.5:
+                votes.append(1)
+                reasons.append(f"✅ 8-candle uptrend ({roc8:.2f}%)")
+            else:
+                votes.append(0)
 
         # 6. MACD — histogram direction + line vs signal cross
         if macd_hist > 0 and macd > macd_sig:
@@ -2183,7 +2221,7 @@ def main():
                 # A new signal only LOCKS in when it has appeared on
                 # CONSECUTIVE_NEEDED consecutive refreshes at LOCK_CONF_THRESHOLD% confidence.
                 # This prevents noise-driven flips on every refresh.
-                LOCK_CONF_THRESHOLD = 70.0   # minimum confidence to even consider a flip
+                LOCK_CONF_THRESHOLD = 62.0   # minimum confidence to even consider a flip
                 CONSECUTIVE_NEEDED  = 2       # must appear N times in a row to lock
 
                 _sk   = f"locked_signal_{symbol}"    # locked signal direction
