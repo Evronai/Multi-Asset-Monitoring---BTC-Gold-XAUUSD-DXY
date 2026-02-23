@@ -516,9 +516,9 @@ class DataFetcher:
     def __init__(self):
         pass
 
-    def fetch(self, symbol: str, interval: str, limit: int = 500) -> Tuple[Optional[pd.DataFrame], str]:
+    def fetch(self, symbol: str, interval: str, limit: int = 500, av_key: str = "") -> Tuple[Optional[pd.DataFrame], str]:
         """Delegate to module-level cached fetch so cache is truly shared across reruns."""
-        return _cached_fetch(symbol, interval, limit)
+        return _cached_fetch(symbol, interval, limit, av_key)
 
     def _fetch_kraken(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
         """
@@ -778,8 +778,80 @@ class DataFetcher:
 
 
 
+    def _fetch_alpha_vantage_gold(self, interval: str, api_key: str) -> Tuple[Optional[pd.DataFrame], str]:
+        """
+        Alpha Vantage — XAU/USD (gold) OHLCV.
+        Free tier: 25 calls/day. Supports intraday + daily.
+        """
+        try:
+            # Map our intervals to Alpha Vantage function + interval params
+            if interval in ("1m", "5m", "15m", "30m", "1h"):
+                av_interval_map = {"1m": "1min", "5m": "5min", "15m": "15min",
+                                   "30m": "30min", "1h": "60min"}
+                av_interval = av_interval_map.get(interval, "60min")
+                function = "FX_INTRADAY"
+                params = {
+                    "function":    function,
+                    "from_symbol": "XAU",
+                    "to_symbol":   "USD",
+                    "interval":    av_interval,
+                    "outputsize":  "full",
+                    "apikey":      api_key,
+                    "datatype":    "json",
+                }
+                time_key = f"Time Series FX ({av_interval})"
+            else:
+                # 4h and 1day → use daily (AV has no 4h FX endpoint)
+                function = "FX_DAILY"
+                params = {
+                    "function":    function,
+                    "from_symbol": "XAU",
+                    "to_symbol":   "USD",
+                    "outputsize":  "full",
+                    "apikey":      api_key,
+                    "datatype":    "json",
+                }
+                time_key = "Time Series FX (Daily)"
+
+            url = "https://www.alphavantage.co/query"
+            resp = requests.get(url, params=params, timeout=20)
+            resp.raise_for_status()
+            data = resp.json()
+
+            # Detect API errors / rate limit
+            if "Note" in data:
+                return None, "Alpha Vantage rate limited — max 25 calls/day on free tier"
+            if "Error Message" in data:
+                return None, f"Alpha Vantage error: {data['Error Message']}"
+            if time_key not in data:
+                return None, f"Alpha Vantage: unexpected response keys: {list(data.keys())}"
+
+            ts = data[time_key]
+            rows = []
+            for dt_str, vals in ts.items():
+                rows.append({
+                    "timestamp": pd.to_datetime(dt_str, utc=True),
+                    "open":      float(vals["1. open"]),
+                    "high":      float(vals["2. high"]),
+                    "low":       float(vals["3. low"]),
+                    "close":     float(vals["4. close"]),
+                    "volume":    0.0,  # AV FX endpoints don't provide volume
+                })
+
+            df = pd.DataFrame(rows).set_index("timestamp").sort_index()
+            df = df[df["close"] > 0]
+
+            if len(df) < 5:
+                return None, "Alpha Vantage: insufficient XAU/USD data"
+
+            return df, "Alpha Vantage (XAU/USD)"
+
+        except Exception as e:
+            return None, f"Alpha Vantage error: {e}"
+
+
 @st.cache_data(ttl=600, show_spinner=False)
-def _cached_fetch(symbol: str, interval: str, limit: int = 500) -> Tuple[Optional[pd.DataFrame], str]:
+def _cached_fetch(symbol: str, interval: str, limit: int = 500, av_key: str = "") -> Tuple[Optional[pd.DataFrame], str]:
     """
     Module-level cached fetch — cache key is (symbol, interval, limit) only.
     This ensures desktop and mobile always get identical data for the same symbol+TF.
@@ -799,6 +871,12 @@ def _cached_fetch(symbol: str, interval: str, limit: int = 500) -> Tuple[Optiona
         if df is not None and len(df) >= 20:
             return df, src
         return _f._fetch_coingecko(symbol, interval)
+    elif symbol == "XAU/USD":
+        if av_key:
+            df, src = _f._fetch_alpha_vantage_gold(interval, av_key)
+            if df is not None and len(df) >= 20:
+                return df, src
+        return None, "XAU/USD requires an Alpha Vantage API key — add it in ⚙ Settings"
     else:
         df, src = _f._fetch_kraken(symbol, interval, limit)
         if df is not None and len(df) >= 20:
@@ -2025,7 +2103,7 @@ def main():
         st.markdown("**Change Settings:**")
 
         new_instruments = st.multiselect(
-            "Markets", ["BTC/USDT", "ETH/USDT", "EUR/USD", "GBP/USD", "USD/JPY"],
+            "Markets", ["BTC/USDT", "ETH/USDT", "XAU/USD", "EUR/USD", "GBP/USD", "USD/JPY"],
             default=cur_instruments, key="instruments_mobile"
         )
         new_timeframes = st.multiselect(
@@ -2036,6 +2114,10 @@ def main():
         new_htf = st.checkbox("Require HTF Confirmation", value=cur_htf, key="htf_mobile")
         new_risk = st.slider("Max Risk %", 0.1, 5.0, cur_risk, 0.1, key="risk_mobile")
         new_atr  = st.slider("ATR Multiplier", 1.0, 5.0, cur_atr, 0.1, key="atr_mobile")
+        new_av   = st.text_input("Alpha Vantage Key (for XAU/USD)", type="password",
+                              value=st.session_state.get("cfg_av_key", ""),
+                              key="av_mobile",
+                              help="Free key at alphavantage.co — required for XAU/USD data")
         new_news = st.text_input("NewsData.io Key (optional)", type="password", key="news_mobile")
 
         st.divider()
@@ -2047,6 +2129,8 @@ def main():
             st.session_state["cfg_require_htf"]    = new_htf
             st.session_state["cfg_max_risk"]       = new_risk
             st.session_state["cfg_atr_multiplier"] = new_atr
+            if new_av:
+                st.session_state["cfg_av_key"] = new_av
             if new_news:
                 st.session_state["cfg_news_api_key"] = new_news
             st.cache_data.clear()
@@ -2066,7 +2150,7 @@ def main():
                 data = {}
                 with st.spinner(f"Loading {symbol}..."):
                     for tf in timeframes:
-                        df, source = fetcher.fetch(symbol, tf, limit=300)
+                        df, source = fetcher.fetch(symbol, tf, limit=300, av_key=st.session_state.get("cfg_av_key", ""))
                         if df is not None and len(df) >= 50:
                             data[tf] = (df, source)
                         else:
@@ -2251,7 +2335,7 @@ def main():
 
         if chart_symbol and chart_tf:
             with st.spinner("Building chart..."):
-                df, source = fetcher.fetch(chart_symbol, chart_tf, limit=300)
+                df, source = fetcher.fetch(chart_symbol, chart_tf, limit=300, av_key=st.session_state.get("cfg_av_key", ""))
 
                 if df is not None and len(df) > 50:
                     st.markdown(
@@ -2381,7 +2465,7 @@ def main():
 
         if st.button("  ▶  RUN BACKTEST  ", type="primary"):
             with st.spinner("Running simulation..."):
-                df, source = fetcher.fetch(bt_symbol, bt_tf, limit=500)
+                df, source = fetcher.fetch(bt_symbol, bt_tf, limit=500, av_key=st.session_state.get("cfg_av_key", ""))
 
                 if df is None or len(df) < 100:
                     st.error(f"Insufficient data: {source}")
