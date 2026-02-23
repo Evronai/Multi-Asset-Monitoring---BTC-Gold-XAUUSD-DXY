@@ -473,14 +473,7 @@ with st.sidebar:
     st.caption("Settings are in the **⚙ SETTINGS** tab.")
     st.divider()
 
-    # Alpha Vantage key — stored directly in session_state via key=
-    st.text_input(
-        "Alpha Vantage Key (XAU/USD)",
-        type="password",
-        key="cfg_av_key",
-        help="Required for XAU/USD. Free at alphavantage.co",
-        placeholder="Paste key here…"
-    )
+
 
     st.divider()
     run_btn = st.button("◈  REFRESH ANALYSIS", type="primary", use_container_width=True)
@@ -527,9 +520,9 @@ class DataFetcher:
     def __init__(self):
         pass
 
-    def fetch(self, symbol: str, interval: str, limit: int = 500, av_key: str = "") -> Tuple[Optional[pd.DataFrame], str]:
+    def fetch(self, symbol: str, interval: str, limit: int = 500) -> Tuple[Optional[pd.DataFrame], str]:
         """Delegate to module-level cached fetch so cache is truly shared across reruns."""
-        return _cached_fetch(symbol, interval, limit, av_key)
+        return _cached_fetch(symbol, interval, limit)
 
     def _fetch_kraken(self, symbol: str, interval: str, limit: int) -> Tuple[Optional[pd.DataFrame], str]:
         """
@@ -789,99 +782,8 @@ class DataFetcher:
 
 
 
-    def _fetch_alpha_vantage_gold(self, interval: str, api_key: str) -> Tuple[Optional[pd.DataFrame], str]:
-        """
-        Alpha Vantage XAU/USD — free tier uses:
-          - GOLD_HISTORY (daily OHLCV, free) for 4h/1day
-          - FX_DAILY (daily OHLCV, free) for all intraday intervals
-            (FX_INTRADAY is premium-only, so we use daily for everything)
-        """
-        try:
-            # Try the dedicated Gold history endpoint first (free, OHLCV)
-            params = {
-                "function":  "GOLD_HISTORY",
-                "apikey":    api_key,
-                "datatype":  "json",
-            }
-            resp = requests.get("https://www.alphavantage.co/query",
-                                params=params, timeout=20)
-            resp.raise_for_status()
-            data = resp.json()
-
-            # Check for errors / premium gate
-            if "Note" in data:
-                return None, "Alpha Vantage rate limited (25 calls/day on free tier)"
-            if "Information" in data:
-                return None, f"Alpha Vantage: {data['Information'][:120]}"
-            if "Error Message" in data:
-                return None, f"Alpha Vantage: {data['Error Message'][:120]}"
-
-            # GOLD_HISTORY returns {"data": [{"date":..,"open":..,"high":..,"low":..,"close":..}, ...]}
-            if "data" in data:
-                rows = []
-                for item in data["data"]:
-                    try:
-                        rows.append({
-                            "timestamp": pd.to_datetime(item["date"], utc=True),
-                            "open":      float(item.get("open",  item.get("price", 0))),
-                            "high":      float(item.get("high",  item.get("price", 0))),
-                            "low":       float(item.get("low",   item.get("price", 0))),
-                            "close":     float(item.get("close", item.get("price", 0))),
-                            "volume":    0.0,
-                        })
-                    except (KeyError, ValueError):
-                        continue
-                if rows:
-                    df = pd.DataFrame(rows).set_index("timestamp").sort_index()
-                    df = df[df["close"] > 0].tail(500)
-                    if len(df) >= 5:
-                        return df, "Alpha Vantage GOLD_HISTORY (daily)"
-
-            # Fallback: FX_DAILY for XAU/USD (free tier)
-            params2 = {
-                "function":    "FX_DAILY",
-                "from_symbol": "XAU",
-                "to_symbol":   "USD",
-                "outputsize":  "compact",
-                "apikey":      api_key,
-            }
-            resp2 = requests.get("https://www.alphavantage.co/query",
-                                 params=params2, timeout=20)
-            resp2.raise_for_status()
-            data2 = resp2.json()
-
-            if "Note" in data2:
-                return None, "Alpha Vantage rate limited"
-            if "Information" in data2:
-                return None, f"Alpha Vantage premium required: {data2['Information'][:80]}"
-
-            time_key = "Time Series FX (Daily)"
-            if time_key not in data2:
-                return None, f"Alpha Vantage no data — keys: {list(data2.keys())}"
-
-            rows = []
-            for dt_str, v in data2[time_key].items():
-                rows.append({
-                    "timestamp": pd.to_datetime(dt_str, utc=True),
-                    "open":      float(v["1. open"]),
-                    "high":      float(v["2. high"]),
-                    "low":       float(v["3. low"]),
-                    "close":     float(v["4. close"]),
-                    "volume":    0.0,
-                })
-
-            df = pd.DataFrame(rows).set_index("timestamp").sort_index()
-            df = df[df["close"] > 0].tail(500)
-            if len(df) < 5:
-                return None, "Alpha Vantage: insufficient XAU/USD data"
-            return df, "Alpha Vantage FX_DAILY (XAU/USD)"
-
-        except Exception as e:
-            return None, f"Alpha Vantage error: {e}"
-
-
 @st.cache_data(ttl=600, show_spinner=False)
-def _cached_fetch(symbol: str, interval: str, limit: int = 500, av_key: str = "") -> Tuple[Optional[pd.DataFrame], str]:
+def _cached_fetch(symbol: str, interval: str, limit: int = 500) -> Tuple[Optional[pd.DataFrame], str]:
     """
     Module-level cached fetch — cache key is (symbol, interval, limit) only.
     This ensures desktop and mobile always get identical data for the same symbol+TF.
@@ -901,12 +803,6 @@ def _cached_fetch(symbol: str, interval: str, limit: int = 500, av_key: str = ""
         if df is not None and len(df) >= 20:
             return df, src
         return _f._fetch_coingecko(symbol, interval)
-    elif symbol == "XAU/USD":
-        if av_key:
-            df, src = _f._fetch_alpha_vantage_gold(interval, av_key)
-            if df is not None and len(df) >= 20:
-                return df, src
-        return None, "XAU/USD requires an Alpha Vantage API key — add it in ⚙ Settings"
     else:
         df, src = _f._fetch_kraken(symbol, interval, limit)
         if df is not None and len(df) >= 20:
@@ -1377,13 +1273,14 @@ class MultiTimeframeAnalyzer:
             votes.append(0)
             reasons.append("⚪ Ranging market")
 
-        # 2. BOS
-        if structure.get('bos_bullish'):
+        # 2. BOS — only meaningful if structure is NOT already in that trend
+        # (avoids double-counting with trend structure vote)
+        if structure.get('bos_bullish') and s != 'UPTREND':
             votes.append(1)
-            reasons.append("✅ Bullish BOS (broke swing high)")
-        elif structure.get('bos_bearish'):
+            reasons.append("✅ Bullish BOS — breaking into new structure")
+        elif structure.get('bos_bearish') and s != 'DOWNTREND':
             votes.append(-1)
-            reasons.append("🔴 Bearish BOS (broke swing low)")
+            reasons.append("🔴 Bearish BOS — breaking down into new structure")
 
         # 3. EMA alignment (9 > 21 > 50 > 200)
         if all(k in emas for k in [9, 21, 50]):
@@ -1406,19 +1303,22 @@ class MultiTimeframeAnalyzer:
                 votes.append(-1)
                 reasons.append("🔴 Price below EMA 50")
 
-        # 5. RSI (avoid extremes, use for confirmation)
-        if 45 < rsi < 70:
-            votes.append(1)
-            reasons.append(f"✅ RSI bullish zone ({rsi:.1f})")
-        elif 30 < rsi <= 45:
+        # 5. RSI — momentum + extremes only (zone-only voting is unreliable)
+        if rsi >= 70:
             votes.append(-1)
-            reasons.append(f"🔴 RSI bearish zone ({rsi:.1f})")
-        elif rsi >= 70:
-            votes.append(-1)
-            reasons.append(f"⚠️ RSI overbought ({rsi:.1f})")
+            reasons.append(f"⚠️ RSI overbought ({rsi:.1f}) — potential reversal")
         elif rsi <= 30:
             votes.append(1)
-            reasons.append(f"⚠️ RSI oversold ({rsi:.1f})")
+            reasons.append(f"✅ RSI oversold ({rsi:.1f}) — potential reversal")
+        elif rsi >= 55:
+            votes.append(1)
+            reasons.append(f"✅ RSI above 55 — bullish momentum ({rsi:.1f})")
+        elif rsi < 45:
+            votes.append(-1)
+            reasons.append(f"🔴 RSI below 45 — bearish momentum ({rsi:.1f})")
+        else:
+            votes.append(0)
+            reasons.append(f"⚪ RSI neutral zone ({rsi:.1f})")
 
         # 6. MACD — use histogram for direction + cross
         if macd_hist > 0 and macd > macd_sig:
@@ -1442,42 +1342,54 @@ class MultiTimeframeAnalyzer:
             votes.append(0)
             reasons.append(f"⚪ ADX {adx:.1f} weak trend")
 
-        # 8. Volume confirmation (skip if no real volume data)
+        # 8. Volume confirmation — direction-aware (high vol on down candle = bearish)
         if vol_ratio > 0 and vol_ratio != 1.0:
-            if vol_ratio > 1.3:
+            last_candle_bullish = price >= emas.get(9, price)  # proxy: price vs fast EMA
+            if vol_ratio > 1.3 and last_candle_bullish:
                 votes.append(1)
-                reasons.append(f"✅ Above-average volume ({vol_ratio:.1f}x)")
-            elif vol_ratio < 0.7:
+                reasons.append(f"✅ High volume bullish candle ({vol_ratio:.1f}x)")
+            elif vol_ratio > 1.3 and not last_candle_bullish:
                 votes.append(-1)
-                reasons.append(f"⚠️ Low volume ({vol_ratio:.1f}x) — weak move")
+                reasons.append(f"🔴 High volume bearish candle ({vol_ratio:.1f}x)")
+            elif vol_ratio < 0.7:
+                votes.append(0)
+                reasons.append(f"⚪ Low volume ({vol_ratio:.1f}x) — conviction weak")
             else:
                 votes.append(0)
         else:
-            reasons.append("⚪ Volume N/A (forex/commodity — no centralized volume)")
+            reasons.append("⚪ Volume N/A (forex — no centralized volume)")
 
-        # 9. Bollinger Bands position
+        # 9. Bollinger Bands — only extreme squeeze/expansion signals
+        bb_width = (bb_upper - bb_lower) / bb_mid if bb_mid > 0 else 0
         if price > bb_upper:
             votes.append(-1)
-            reasons.append("⚠️ Price above BB upper (overextended)")
+            reasons.append("⚠️ Price above BB upper — overextended short-term")
         elif price < bb_lower:
             votes.append(1)
-            reasons.append("✅ Price below BB lower (oversold)")
-        elif price > bb_mid:
-            votes.append(1)
-            reasons.append("✅ Price above BB midline")
+            reasons.append("✅ Price below BB lower — mean reversion likely")
         else:
-            votes.append(-1)
-            reasons.append("🔴 Price below BB midline")
+            votes.append(0)
+            reasons.append(f"⚪ Price within BB ({((price-bb_lower)/(bb_upper-bb_lower)*100):.0f}% of band)")
 
-        # 10. Smart Money patterns
-        recent_bullish_ob = any(ob['type'] == 'BULLISH_OB' for ob in order_blocks[-3:])
-        recent_bearish_ob = any(ob['type'] == 'BEARISH_OB' for ob in order_blocks[-3:])
-        if recent_bullish_ob:
+        # 10. Smart Money patterns — only vote if price is NEAR the OB (within 2% of midpoint)
+        def near_ob(ob, current_price, threshold=0.02):
+            mid = (ob['high'] + ob['low']) / 2
+            return abs(current_price - mid) / mid < threshold
+
+        relevant_bull_ob = any(
+            ob['type'] == 'BULLISH_OB' and near_ob(ob, price)
+            for ob in order_blocks[-10:]
+        )
+        relevant_bear_ob = any(
+            ob['type'] == 'BEARISH_OB' and near_ob(ob, price)
+            for ob in order_blocks[-10:]
+        )
+        if relevant_bull_ob:
             votes.append(1)
-            reasons.append("✅ Bullish Order Block detected")
-        if recent_bearish_ob:
+            reasons.append("✅ Price at Bullish Order Block — institutional demand zone")
+        if relevant_bear_ob:
             votes.append(-1)
-            reasons.append("🔴 Bearish Order Block detected")
+            reasons.append("🔴 Price at Bearish Order Block — institutional supply zone")
 
         recent_bullish_fvg = any(f['type'] == 'BULLISH_FVG' for f in fvgs[-3:])
         recent_bearish_fvg = any(f['type'] == 'BEARISH_FVG' for f in fvgs[-3:])
@@ -2133,7 +2045,7 @@ def main():
         st.markdown("**Change Settings:**")
 
         new_instruments = st.multiselect(
-            "Markets", ["BTC/USDT", "ETH/USDT", "XAU/USD", "EUR/USD", "GBP/USD", "USD/JPY"],
+            "Markets", ["BTC/USDT", "ETH/USDT", "EUR/USD", "GBP/USD", "USD/JPY"],
             default=cur_instruments, key="instruments_mobile"
         )
         new_timeframes = st.multiselect(
@@ -2144,13 +2056,7 @@ def main():
         new_htf = st.checkbox("Require HTF Confirmation", value=cur_htf, key="htf_mobile")
         new_risk = st.slider("Max Risk %", 0.1, 5.0, cur_risk, 0.1, key="risk_mobile")
         new_atr  = st.slider("ATR Multiplier", 1.0, 5.0, cur_atr, 0.1, key="atr_mobile")
-        st.text_input(
-            "Alpha Vantage Key (for XAU/USD)", type="password",
-            key="av_mobile",
-            value=st.session_state.get("cfg_av_key", ""),
-            help="Free key at alphavantage.co — required for XAU/USD data",
-            placeholder="Paste your free API key here…"
-        )
+
         new_news = st.text_input("NewsData.io Key (optional)", type="password", key="news_mobile")
 
         st.divider()
@@ -2162,9 +2068,6 @@ def main():
             st.session_state["cfg_require_htf"]    = new_htf
             st.session_state["cfg_max_risk"]       = new_risk
             st.session_state["cfg_atr_multiplier"] = new_atr
-            _av_val = st.session_state.get("av_mobile", "")
-            if _av_val:
-                st.session_state["cfg_av_key"] = _av_val
             if new_news:
                 st.session_state["cfg_news_api_key"] = new_news
             st.cache_data.clear()
@@ -2184,7 +2087,7 @@ def main():
                 data = {}
                 with st.spinner(f"Loading {symbol}..."):
                     for tf in timeframes:
-                        df, source = fetcher.fetch(symbol, tf, limit=300, av_key=st.session_state.get("cfg_av_key", ""))
+                        df, source = fetcher.fetch(symbol, tf, limit=300)
                         if df is not None and len(df) >= 50:
                             data[tf] = (df, source)
                         else:
@@ -2369,7 +2272,7 @@ def main():
 
         if chart_symbol and chart_tf:
             with st.spinner("Building chart..."):
-                df, source = fetcher.fetch(chart_symbol, chart_tf, limit=300, av_key=st.session_state.get("cfg_av_key", ""))
+                df, source = fetcher.fetch(chart_symbol, chart_tf, limit=300)
 
                 if df is not None and len(df) > 50:
                     st.markdown(
@@ -2499,7 +2402,7 @@ def main():
 
         if st.button("  ▶  RUN BACKTEST  ", type="primary"):
             with st.spinner("Running simulation..."):
-                df, source = fetcher.fetch(bt_symbol, bt_tf, limit=500, av_key=st.session_state.get("cfg_av_key", ""))
+                df, source = fetcher.fetch(bt_symbol, bt_tf, limit=500)
 
                 if df is None or len(df) < 100:
                     st.error(f"Insufficient data: {source}")
