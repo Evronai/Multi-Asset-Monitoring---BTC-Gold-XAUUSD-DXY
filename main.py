@@ -473,11 +473,11 @@ with st.sidebar:
 
     with st.expander("API KEYS", expanded=False):
         st.markdown("**NEWSDATA.IO** · Optional — enhances news tab")
-        news_api_key = st.text_input("NewsData Key", type="password", key="news_api_key")
-        st.caption("All market data is free — no keys required. Crypto: Kraken→Coinbase→CoinGecko. Forex: Kraken (EUR/USD, GBP/USD, USD/JPY).")
+        st.text_input("NewsData Key", type="password", key="news_api_key")
+        st.caption("All market data is free — no keys required.")
 
     st.markdown("### ── INSTRUMENTS ──")
-    instruments = st.multiselect(
+    st.multiselect(
         "Markets",
         ["BTC/USDT", "ETH/USDT", "EUR/USD", "GBP/USD", "USD/JPY"],
         default=["BTC/USDT", "ETH/USDT"],
@@ -485,7 +485,7 @@ with st.sidebar:
     )
 
     st.markdown("### ── TIMEFRAMES ──")
-    timeframes = st.multiselect(
+    st.multiselect(
         "Frames",
         ["15m", "1h", "4h", "1day"],
         default=["15m", "1h", "4h", "1day"],
@@ -493,19 +493,18 @@ with st.sidebar:
     )
 
     st.markdown("### ── SIGNAL PARAMS ──")
-    min_confidence = st.slider("Min Confidence %", 0, 100, 60, key="min_confidence")
-    require_htf = st.checkbox("Require HTF Confirmation", value=True, key="require_htf")
+    st.slider("Min Confidence %", 0, 100, 60, key="min_confidence")
+    st.checkbox("Require HTF Confirmation", value=True, key="require_htf")
 
     st.markdown("### ── RISK MGMT ──")
-    max_risk = st.slider("Max Risk per Trade %", 0.1, 5.0, 1.0, 0.1, key="max_risk")
-    atr_multiplier = st.slider("ATR Stop Multiplier", 1.0, 5.0, 2.0, 0.1, key="atr_multiplier")
+    st.slider("Max Risk per Trade %", 0.1, 5.0, 1.0, 0.1, key="max_risk")
+    st.slider("ATR Stop Multiplier", 1.0, 5.0, 2.0, 0.1, key="atr_multiplier")
 
     st.divider()
     run_btn = st.button("◈  REFRESH ANALYSIS", type="primary", use_container_width=True)
     if run_btn:
         st.cache_data.clear()
         st.rerun()
-
     st.caption(f"SYS · {datetime.utcnow().strftime('%H:%M:%S UTC')}")
 
 
@@ -1969,60 +1968,66 @@ def main():
 
     tab0, tab1, tab2, tab3, tab4 = st.tabs(["  ⚙ SETTINGS  ", "  SIGNALS  ", "  CHARTS  ", "  NEWS  ", "  BACKTEST  "])
 
-    # ========== TAB 0: SETTINGS (mobile-first) ==========
+    # ========== TAB 0: SETTINGS (mobile) ==========
     with tab0:
         st.markdown('<div class="section-label">Configuration</div>', unsafe_allow_html=True)
-        st.caption("All settings sync with the sidebar automatically.")
 
-        with st.expander("── INSTRUMENTS ──", expanded=True):
-            instruments = st.multiselect(
-                "Markets",
-                ["BTC/USDT", "ETH/USDT", "EUR/USD", "GBP/USD", "USD/JPY"],
-                default=st.session_state.get("instruments", ["BTC/USDT", "ETH/USDT"]),
-                key="instruments_tab"
-            )
-            if instruments != st.session_state.get("instruments", ["BTC/USDT", "ETH/USDT"]):
-                st.session_state["instruments"] = instruments
+        # Read current values from session state (set by sidebar widgets)
+        cur_instruments  = st.session_state.get("instruments",   ["BTC/USDT", "ETH/USDT"])
+        cur_timeframes   = st.session_state.get("timeframes",    ["15m", "1h", "4h", "1day"])
+        cur_confidence   = st.session_state.get("min_confidence", 60)
+        cur_htf          = st.session_state.get("require_htf",   True)
+        cur_risk         = st.session_state.get("max_risk",       1.0)
+        cur_atr          = st.session_state.get("atr_multiplier", 2.0)
 
-        with st.expander("── TIMEFRAMES ──", expanded=True):
-            timeframes = st.multiselect(
-                "Frames",
-                ["15m", "1h", "4h", "1day"],
-                default=st.session_state.get("timeframes", ["15m", "1h", "4h", "1day"]),
-                key="timeframes_tab"
-            )
-            if timeframes != st.session_state.get("timeframes", ["15m", "1h", "4h", "1day"]):
-                st.session_state["timeframes"] = timeframes
+        # Show current config as readable summary cards
+        st.markdown(f"""
+        <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:16px;margin-bottom:12px;">
+            <div style="color:var(--txt-muted);font-size:10px;letter-spacing:2px;margin-bottom:8px;">── CURRENT SETTINGS ──</div>
+            <table style="width:100%;border-collapse:collapse;font-family:'IBM Plex Mono',monospace;">
+                <tr><td style="color:var(--txt-muted);padding:4px 0;font-size:11px;">MARKETS</td>
+                    <td style="color:var(--txt-bright);font-size:11px;text-align:right;">{" · ".join(cur_instruments) or "None"}</td></tr>
+                <tr><td style="color:var(--txt-muted);padding:4px 0;font-size:11px;">TIMEFRAMES</td>
+                    <td style="color:var(--txt-bright);font-size:11px;text-align:right;">{" · ".join(cur_timeframes) or "None"}</td></tr>
+                <tr><td style="color:var(--txt-muted);padding:4px 0;font-size:11px;">MIN CONFIDENCE</td>
+                    <td style="color:var(--txt-bright);font-size:11px;text-align:right;">{cur_confidence}%</td></tr>
+                <tr><td style="color:var(--txt-muted);padding:4px 0;font-size:11px;">HTF CONFIRM</td>
+                    <td style="color:var(--txt-bright);font-size:11px;text-align:right;">{"ON" if cur_htf else "OFF"}</td></tr>
+                <tr><td style="color:var(--txt-muted);padding:4px 0;font-size:11px;">MAX RISK</td>
+                    <td style="color:var(--txt-bright);font-size:11px;text-align:right;">{cur_risk}%</td></tr>
+                <tr><td style="color:var(--txt-muted);padding:4px 0;font-size:11px;">ATR MULT</td>
+                    <td style="color:var(--txt-bright);font-size:11px;text-align:right;">{cur_atr}x</td></tr>
+            </table>
+        </div>
+        """, unsafe_allow_html=True)
 
-        with st.expander("── SIGNAL PARAMS ──", expanded=True):
-            min_confidence = st.slider("Min Confidence %", 0, 100,
-                st.session_state.get("min_confidence", 60), key="min_confidence_tab")
-            if min_confidence != st.session_state.get("min_confidence", 60):
-                st.session_state["min_confidence"] = min_confidence
-            require_htf = st.checkbox("Require HTF Confirmation",
-                value=st.session_state.get("require_htf", True), key="require_htf_tab")
-            if require_htf != st.session_state.get("require_htf", True):
-                st.session_state["require_htf"] = require_htf
+        # Mobile: provide direct controls here
+        st.markdown("**Change Settings:**")
 
-        with st.expander("── RISK MANAGEMENT ──", expanded=True):
-            max_risk = st.slider("Max Risk per Trade %", 0.1, 5.0,
-                st.session_state.get("max_risk", 1.0), 0.1, key="max_risk_tab")
-            if max_risk != st.session_state.get("max_risk", 1.0):
-                st.session_state["max_risk"] = max_risk
-            atr_multiplier = st.slider("ATR Stop Multiplier", 1.0, 5.0,
-                st.session_state.get("atr_multiplier", 2.0), 0.1, key="atr_multiplier_tab")
-            if atr_multiplier != st.session_state.get("atr_multiplier", 2.0):
-                st.session_state["atr_multiplier"] = atr_multiplier
-
-        with st.expander("── API KEYS ──", expanded=False):
-            st.markdown("**NEWSDATA.IO** · Optional — enhances news tab")
-            news_api_key_tab = st.text_input("NewsData Key", type="password", key="news_api_key_tab")
-            if news_api_key_tab:
-                st.session_state["news_api_key"] = news_api_key_tab
-            st.caption("All market data is free — no keys required.")
+        new_instruments = st.multiselect(
+            "Markets", ["BTC/USDT", "ETH/USDT", "EUR/USD", "GBP/USD", "USD/JPY"],
+            default=cur_instruments, key="instruments_mobile"
+        )
+        new_timeframes = st.multiselect(
+            "Timeframes", ["15m", "1h", "4h", "1day"],
+            default=cur_timeframes, key="timeframes_mobile"
+        )
+        new_confidence = st.slider("Min Confidence %", 0, 100, cur_confidence, key="confidence_mobile")
+        new_htf = st.checkbox("Require HTF Confirmation", value=cur_htf, key="htf_mobile")
+        new_risk = st.slider("Max Risk %", 0.1, 5.0, cur_risk, 0.1, key="risk_mobile")
+        new_atr  = st.slider("ATR Multiplier", 1.0, 5.0, cur_atr, 0.1, key="atr_mobile")
+        new_news = st.text_input("NewsData.io Key (optional)", type="password", key="news_mobile")
 
         st.divider()
-        if st.button("◈  APPLY & REFRESH", type="primary", use_container_width=True):
+        if st.button("◈  APPLY & RUN ANALYSIS", type="primary", use_container_width=True, key="apply_mobile"):
+            st.session_state["instruments"]   = new_instruments
+            st.session_state["timeframes"]    = new_timeframes
+            st.session_state["min_confidence"] = new_confidence
+            st.session_state["require_htf"]   = new_htf
+            st.session_state["max_risk"]      = new_risk
+            st.session_state["atr_multiplier"] = new_atr
+            if new_news:
+                st.session_state["news_api_key"] = new_news
             st.cache_data.clear()
             st.rerun()
 
