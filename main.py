@@ -2081,7 +2081,7 @@ def main():
     fetcher = DataFetcher()
     sentiment_engine = SentimentEngine(api_key=news_key)
 
-    tab0, tab1, tab2, tab3, tab4 = st.tabs(["  ⚙ SETTINGS  ", "  SIGNALS  ", "  CHARTS  ", "  NEWS  ", "  BACKTEST  "])
+    tab1, tab2, tab3, tab4, tab0 = st.tabs(["  SIGNALS  ", "  CHARTS  ", "  NEWS  ", "  BACKTEST  ", "  ⚙ SETTINGS  "])
 
     # ========== TAB 0: SETTINGS (mobile) ==========
     with tab0:
